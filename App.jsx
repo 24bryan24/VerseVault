@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -274,14 +274,13 @@ const App = () => {
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 mb-8 font-sans">
           <div className="flex flex-col md:flex-row gap-6 items-end">
             <div className="flex-1 w-full">
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Navigation</span>
+              <div className="flex justify-end items-center mb-3">
                 <button 
                   onClick={() => setSearchMode(searchMode === 'text' ? 'select' : 'text')}
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-bold uppercase"
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1.5 font-bold uppercase tracking-wider"
                 >
-                  {searchMode === 'text' ? <List size={12}/> : <Type size={12}/>}
-                  {searchMode === 'text' ? 'Browse Bible' : 'Manual Search'}
+                  {searchMode === 'text' ? <BookOpen size={14}/> : <Keyboard size={14}/>}
+                  {searchMode === 'text' ? 'Browse Library' : 'Direct Entry'}
                 </button>
               </div>
               
@@ -313,7 +312,7 @@ const App = () => {
                 )}
                 
                 <button onClick={fetchPassage} disabled={loading} className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50">
-                  {loading ? <RefreshCw className="animate-spin" size={20} /> : <ChevronRight size={24} />}
+                  {loading ? <RefreshCw className="animate-spin" size={20} /> : <ArrowRight size={24} />}
                 </button>
               </div>
             </div>
