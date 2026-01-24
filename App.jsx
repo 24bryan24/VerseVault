@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3 } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -34,10 +34,12 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
   const totalVisible = baseVisibility + extraReveal;
   const charVisibleMode = visibilityMode === 'wpm' && word.id === currentWpmIndex;
 
+  let alphanumericCounter = 0;
+
   return (
     <div 
       onClick={() => onClick(word.id)}
-      className={`cursor-pointer select-none transition-all group relative ${showUnderlines ? 'font-mono tracking-tighter' : 'tracking-[-0.1em]'}`}
+      className={`cursor-pointer select-none transition-all group relative inline-flex items-baseline ${showUnderlines ? 'font-mono' : ''}`}
     >
       {word.letters.map((char, cIdx) => {
         const isPunctuation = /[^a-zA-Z0-9]/.test(char);
@@ -46,7 +48,12 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
         if (visibilityMode === 'wpm') {
           isCurrentlyVisible = charVisibleMode;
         } else {
-          isCurrentlyVisible = isPunctuation || cIdx < totalVisible;
+          if (isPunctuation) {
+            isCurrentlyVisible = true;
+          } else {
+            isCurrentlyVisible = alphanumericCounter < totalVisible;
+            alphanumericCounter++;
+          }
         }
 
         return (
@@ -80,8 +87,8 @@ const App = () => {
   const [verseData, setVerseData] = useState(null);
   const [visibilityMode, setVisibilityMode] = useState('full'); 
   const [showUnderlines, setShowUnderlines] = useState(true);
-  const [isStudyModeActive, setIsStudyModeActive] = useState(false);
   const [revealedLetters, setRevealedLetters] = useState({});
+  const [fontOption, setFontOption] = useState('modern'); // classic, modern, mono, elegant, bold
 
   // WPM State
   const [wpmValue, setWpmValue] = useState(50);
@@ -90,25 +97,11 @@ const App = () => {
   const [wpmCycleTarget, setWpmCycleTarget] = useState(5);
   const [wpmCycleCount, setWpmCycleCount] = useState(0);
 
-  // App Title Options State
-  const appNameOptions = [
-    "Word Heart", "Verse Flow", "Lampsight", "Scripture Recall", "Logos Memo",
-    "Fountain Recall", "Gospel Ink", "Spirit Script", "Heart Tablet", "The Reminder",
-    "Living Word", "Verse Vault", "Sacred Echo", "Anchor Memory", "Truth Trace",
-    "Seed Sower", "Bright Lamp", "Daily Manna", "Pure Logos", "Way Marker",
-    "Deep Roots", "Morning Star", "Rock Steady", "Spirit Breath", "Golden Lamp",
-    "Eternal Echo", "Light Path", "Ancient Path", "Zion Stream", "Shepherd Voice",
-    "Wisdom Well", "Narrow Gate", "Kingdom Key", "Temple Wall", "Selah Space"
-  ];
-  const [currentTitleIndex, setCurrentTitleIndex] = useState(0);
-
-  // Memoized lists for the selector
   const chaptersList = useMemo(() => {
     const book = BIBLE_DATA.find(b => b.book === selBook);
     return book ? Array.from({ length: book.chapters }, (_, i) => i + 1) : [1];
   }, [selBook]);
 
-  // Exponential backoff helper for API retries
   const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
     try {
       const res = await fetch(url, options);
@@ -123,24 +116,35 @@ const App = () => {
     }
   };
 
-  // Fetch Logic
   const fetchPassage = async () => {
     let finalQuery = searchMode === 'text' ? manualQuery : `${selBook} ${selChapter}:${selVerse}`;
     setLoading(true);
     setError(null);
     setRevealedLetters({});
-    setIsStudyModeActive(false);
     resetWpm();
 
     try {
+      // Check for range patterns like "Galatians 1-3" or "Psalm 23"
       const isFullBook = BIBLE_DATA.some(b => b.book.toLowerCase() === finalQuery.trim().toLowerCase());
       const selectedBookMeta = BIBLE_DATA.find(b => b.book.toLowerCase() === finalQuery.trim().toLowerCase());
-
+      
       let chaptersToFetch = [];
+      
       if (isFullBook && selectedBookMeta) {
         chaptersToFetch = Array.from({ length: selectedBookMeta.chapters }, (_, i) => `${selectedBookMeta.book} ${i + 1}`);
       } else {
-        chaptersToFetch = [finalQuery];
+        // Basic check for chapter range in manual query like "Galatians 1-3"
+        const rangeMatch = finalQuery.match(/^(.+?)\s+(\d+)\s*-\s*(\d+)$/);
+        if (rangeMatch) {
+          const bookName = rangeMatch[1];
+          const start = parseInt(rangeMatch[2]);
+          const end = parseInt(rangeMatch[3]);
+          for (let i = start; i <= end; i++) {
+            chaptersToFetch.push(`${bookName} ${i}`);
+          }
+        } else {
+          chaptersToFetch = [finalQuery];
+        }
       }
 
       let allWords = [];
@@ -155,32 +159,9 @@ const App = () => {
         });
 
         if (data.passages?.[0]) {
-          const rawText = data.passages[0].trim();
-          
+          const rawText = data.passages[0].trim().replace(/([-–—])/g, ' $1 '); 
           const rawTokens = rawText.split(/\s+/);
-          const processedTokens = [];
-          
-          rawTokens.forEach(token => {
-            if (token.includes('-')) {
-              const parts = token.split(/(-)/);
-              let current = "";
-              parts.forEach((p, idx) => {
-                if (p === '-') {
-                  current += p;
-                  processedTokens.push(current);
-                  current = "";
-                } else if (p !== "") {
-                  if (idx === parts.length - 1) {
-                    processedTokens.push(p);
-                  } else {
-                    current = p;
-                  }
-                }
-              });
-            } else {
-              processedTokens.push(token);
-            }
-          });
+          const processedTokens = rawTokens.filter(t => t.length > 0);
 
           const wordsInChapter = processedTokens.map((w) => {
             const wordObj = {
@@ -193,7 +174,7 @@ const App = () => {
           });
 
           sections.push({
-            title: isFullBook ? query : data.canonical,
+            title: data.canonical,
             words: wordsInChapter
           });
         }
@@ -202,7 +183,7 @@ const App = () => {
       if (sections.length === 0) throw new Error("Passage not found.");
 
       setVerseData({ 
-        reference: isFullBook ? selectedBookMeta.book : sections[0].title, 
+        reference: isFullBook ? selectedBookMeta.book : (sections.length > 1 ? finalQuery : sections[0].title), 
         sections: sections,
         allWords: allWords
       });
@@ -219,22 +200,6 @@ const App = () => {
     setWpmCycleCount(0);
   };
 
-  // Study Mode Cycle
-  useEffect(() => {
-    let interval;
-    if (isStudyModeActive) {
-      const modes = ['full', '3', '2', '1'];
-      interval = setInterval(() => {
-        setVisibilityMode(prev => {
-          const idx = modes.indexOf(prev);
-          return modes[(idx + 1) % modes.length];
-        });
-      }, 5000);
-    }
-    return () => clearInterval(interval);
-  }, [isStudyModeActive]);
-
-  // WPM Cycle Logic
   useEffect(() => {
     let interval;
     if (visibilityMode === 'wpm' && isWpmPlaying && verseData?.allWords) {
@@ -260,12 +225,13 @@ const App = () => {
     return () => clearInterval(interval);
   }, [visibilityMode, isWpmPlaying, wpmValue, verseData, wpmCycleTarget]);
 
-  const toggleWpmValue = () => {
-    setWpmValue(prev => (prev >= 500 ? 50 : prev + 50));
-  };
-
-  const toggleCycleTarget = () => {
-    setWpmCycleTarget(prev => (prev === 5 ? 10 : 5));
+  const toggleWpmValue = () => setWpmValue(prev => (prev >= 500 ? 50 : prev + 50));
+  const toggleCycleTarget = () => setWpmCycleTarget(prev => (prev === 5 ? 10 : 5));
+  
+  const cycleFont = () => {
+    const options = ['classic', 'modern', 'mono', 'elegant', 'bold'];
+    const nextIdx = (options.indexOf(fontOption) + 1) % options.length;
+    setFontOption(options[nextIdx]);
   };
 
   const handleWordClick = (wordGlobalIdx) => {
@@ -276,17 +242,28 @@ const App = () => {
     }));
   };
 
+  const getCanvasStyles = () => {
+    switch(fontOption) {
+      case 'classic': return { container: 'font-serif', heading: 'font-serif italic font-bold tracking-tight', passage: 'font-serif leading-relaxed tracking-normal' };
+      case 'mono': return { container: 'font-mono', heading: 'font-mono font-black uppercase tracking-widest', passage: 'font-mono leading-loose tracking-tighter' };
+      case 'elegant': return { container: 'font-serif', heading: 'font-serif font-light italic tracking-[0.2em] uppercase', passage: 'font-serif font-light leading-[1.8] tracking-wide' };
+      case 'bold': return { container: 'font-sans', heading: 'font-sans font-black uppercase tracking-tighter scale-y-110', passage: 'font-sans font-extrabold leading-snug tracking-tight' };
+      default: return { container: 'font-sans', heading: 'font-sans font-bold tracking-tight', passage: 'font-sans font-medium leading-[1.6]' };
+    }
+  };
+
+  const styles = getCanvasStyles();
+
   return (
-    <div className="min-h-screen bg-neutral-50 text-slate-900 font-sans p-4 md:p-10">
+    <div className={`min-h-screen bg-neutral-50 text-slate-900 p-4 md:p-10 font-sans`}>
       <div className="max-w-4xl mx-auto">
         
-        {/* Header */}
-        <div className="mb-8 flex justify-between items-end">
-          <div className="cursor-pointer group" onClick={() => setCurrentTitleIndex((prev) => (prev + 1) % appNameOptions.length)}>
+        {/* Header - Fixed UI font */}
+        <div className="mb-8 flex justify-between items-end font-sans">
+          <div>
             <h1 className="text-4xl font-black tracking-tighter text-slate-900 uppercase">
-              {appNameOptions[currentTitleIndex].split(' ')[0]} <span className="text-blue-600">{appNameOptions[currentTitleIndex].split(' ')[1]}</span>
+              VERSE <span className="text-blue-600">VAULT</span>
             </h1>
-            <p className="text-slate-500 font-medium">Click title to cycle names • Interactive ESV Tool</p>
           </div>
           <div className="hidden sm:block text-[10px] font-bold text-slate-400 tracking-widest uppercase border-b-2 border-slate-200">
             ESV API v3
@@ -294,7 +271,7 @@ const App = () => {
         </div>
 
         {/* Control Panel */}
-        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 mb-8">
+        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 mb-8 font-sans">
           <div className="flex flex-col md:flex-row gap-6 items-end">
             <div className="flex-1 w-full">
               <div className="flex justify-between items-center mb-3">
@@ -317,43 +294,25 @@ const App = () => {
                       onChange={(e) => setManualQuery(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && fetchPassage()}
                       className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 pl-11 focus:border-blue-500 focus:bg-white outline-none transition-all font-medium"
-                      placeholder="e.g. Philippians 4:8"
+                      placeholder="e.g. Galatians 1-3"
                     />
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                   </div>
                 ) : (
                   <div className="flex gap-2 w-full">
-                    <select 
-                      value={selBook} 
-                      onChange={(e) => setSelBook(e.target.value)}
-                      className="flex-[2] bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500"
-                    >
+                    <select value={selBook} onChange={(e) => setSelBook(e.target.value)} className="flex-[2] bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500">
                       {BIBLE_DATA.map(b => <option key={b.book} value={b.book}>{b.book}</option>)}
                     </select>
-                    <select 
-                      value={selChapter} 
-                      onChange={(e) => setSelChapter(e.target.value)}
-                      className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500"
-                    >
+                    <select value={selChapter} onChange={(e) => setSelChapter(e.target.value)} className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500">
                       {chaptersList.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <div className="flex-1 relative">
-                      <input 
-                        type="number" 
-                        value={selVerse}
-                        onChange={(e) => setSelVerse(e.target.value)}
-                        placeholder="V"
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500"
-                      />
+                      <input type="number" value={selVerse} onChange={(e) => setSelVerse(e.target.value)} placeholder="V" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500" />
                     </div>
                   </div>
                 )}
                 
-                <button 
-                  onClick={fetchPassage}
-                  disabled={loading}
-                  className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50"
-                >
+                <button onClick={fetchPassage} disabled={loading} className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50">
                   {loading ? <RefreshCw className="animate-spin" size={20} /> : <ChevronRight size={24} />}
                 </button>
               </div>
@@ -368,33 +327,29 @@ const App = () => {
         </div>
 
         {/* Sticky Memory Toolbar */}
-        <div className="sticky top-4 z-50 flex flex-wrap items-center justify-between gap-4 mb-8 bg-neutral-50/80 backdrop-blur-md py-2 px-1 rounded-2xl">
+        <div className="sticky top-4 z-50 flex items-center justify-between bg-neutral-50/80 backdrop-blur-md py-2 px-1 rounded-2xl font-sans">
           <div className="flex bg-white rounded-xl shadow-lg border border-slate-200 p-1">
             <button
-              onClick={() => { setVisibilityMode('full'); setIsStudyModeActive(false); resetWpm(); }}
+              onClick={() => { setVisibilityMode('full'); resetWpm(); }}
               className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
-                visibilityMode === 'full' && !isStudyModeActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
+                visibilityMode === 'full' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
               }`}
             >
               <Eye size={16} />
             </button>
-            {[
-              { id: '1', label: '1L' },
-              { id: '2', label: '2L' },
-              { id: '3', label: '3L' }
-            ].map((m) => (
+            {['1', '2', '3'].map((id) => (
               <button
-                key={m.id}
-                onClick={() => { setVisibilityMode(m.id); setIsStudyModeActive(false); resetWpm(); }}
+                key={id}
+                onClick={() => { setVisibilityMode(id); resetWpm(); }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-                  visibilityMode === m.id && !isStudyModeActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
+                  visibilityMode === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
                 }`}
               >
-                <span className="font-black text-sm">{m.label}</span>
+                <span className="font-black text-sm">{id}L</span>
               </button>
             ))}
             <button
-              onClick={() => { setVisibilityMode('wpm'); setIsStudyModeActive(false); }}
+              onClick={() => { setVisibilityMode('wpm'); }}
               className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 border-l border-slate-100 ml-1 ${
                 visibilityMode === 'wpm' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-400 hover:bg-slate-50'
               }`}
@@ -406,61 +361,66 @@ const App = () => {
 
           <div className="flex gap-2">
             <button
-              onClick={() => { setIsStudyModeActive(!isStudyModeActive); resetWpm(); }}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all ${
-                isStudyModeActive ? 'bg-orange-500 border-orange-500 text-white shadow-orange-200' : 'bg-white border-slate-100 text-slate-400'
-              }`}
+              onClick={cycleFont}
+              className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
             >
-              <GraduationCap size={16} />
-              Study
+              <CaseSensitive size={16} />
+              {fontOption}
             </button>
 
             <button
               onClick={() => setShowUnderlines(!showUnderlines)}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all ${
-                !showUnderlines ? 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200' : 'bg-white border-slate-100 text-slate-400'
+              className={`flex items-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
+                showUnderlines ? 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50' : 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200'
               }`}
             >
-              {showUnderlines ? <Grid3X3 size={16} /> : <AlignLeft size={16} />}
-              {showUnderlines ? 'Word Map' : 'Natural Flow'}
+              {showUnderlines ? <AlignLeft size={16} /> : <Grid3X3 size={16} />}
+              {showUnderlines ? 'No Underline' : 'Underline'}
             </button>
           </div>
         </div>
 
         {/* Verse Canvas */}
-        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200 border border-slate-100 p-8 md:p-16 min-h-[450px] relative overflow-hidden">
+        <div className={`bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200 border border-slate-100 p-8 md:p-16 min-h-[450px] relative overflow-hidden ${styles.container}`}>
           {verseData ? (
             <div className="animate-in fade-in zoom-in-95 duration-500">
-              <header className="flex justify-between items-start mb-10 pb-6 border-b border-slate-50">
-                <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight underline decoration-blue-500 decoration-4 underline-offset-8">
+              {/* Prominent Centered Header */}
+              <header className="flex flex-col items-center justify-center mb-16 pb-8 border-b border-slate-50">
+                <div className="relative group">
+                  <h2 className={`text-2xl text-slate-900 text-center ${styles.heading}`}>
                     {verseData.reference}
                   </h2>
+                  <div className="w-12 h-1 bg-blue-500 mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125"></div>
                 </div>
 
                 {/* WPM Reader HUD */}
                 {visibilityMode === 'wpm' && (
-                  <div className="flex flex-col items-end gap-3 animate-in slide-in-from-right-4">
+                  <div className="mt-8 flex flex-col items-center gap-3 animate-in slide-in-from-top-4 font-sans">
                     <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
                       <button onClick={toggleWpmValue} className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 hover:bg-slate-50">{wpmValue} WPM</button>
                       <button onClick={toggleCycleTarget} className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 hover:bg-slate-50">{wpmCycleTarget} CYCLES</button>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-[10px] font-black text-slate-400 tracking-widest uppercase">CYCLE {wpmCycleCount} / {wpmCycleTarget}</div>
-                      <button onClick={() => setIsWpmPlaying(!isWpmPlaying)} className={`p-2 rounded-full transition-all shadow-lg ${isWpmPlaying ? 'bg-red-500 text-white' : 'bg-indigo-600 text-white'}`}>
-                        {isWpmPlaying ? <RotateCcw size={16} /> : <Play size={16} className="ml-0.5" />}
+                      <button onClick={() => setIsWpmPlaying(!isWpmPlaying)} className={`p-3 rounded-full transition-all shadow-xl ${isWpmPlaying ? 'bg-slate-900 text-white' : 'bg-indigo-600 text-white'}`}>
+                        {isWpmPlaying ? <Square size={20} fill="currentColor" /> : <Play size={20} className="ml-0.5" />}
                       </button>
                     </div>
                   </div>
                 )}
-                {isStudyModeActive && <div className="px-3 py-1 text-[10px] font-black rounded-full animate-pulse bg-orange-100 text-orange-600">AUTO-CYCLE ACTIVE</div>}
               </header>
               
-              <div className="space-y-12">
+              <div className="space-y-20">
                 {verseData.sections.map((section, sIdx) => (
                   <div key={sIdx} className="animate-in fade-in duration-700">
-                    {verseData.sections.length > 1 && <h3 className="text-sm font-black text-blue-400 uppercase tracking-[0.2em] mb-4">{section.title}</h3>}
-                    <div className={`flex flex-wrap ${showUnderlines ? 'gap-x-4 gap-y-6' : 'gap-x-[0.1em] gap-y-4'} text-2xl md:text-3xl font-medium text-slate-800 leading-[1.4]`}>
+                    <div className="flex items-center gap-4 mb-8">
+                      <div className="w-1 h-8 bg-blue-600 rounded-full"></div>
+                      <h3 className={`text-xl text-blue-600 capitalize ${styles.heading}`}>
+                        {section.title}
+                      </h3>
+                      <div className="flex-1 h-px bg-blue-100"></div>
+                    </div>
+                    <div className={`flex flex-wrap ${showUnderlines ? 'gap-x-4 gap-y-6' : 'gap-x-1.5 gap-y-4'} text-2xl md:text-3xl font-medium text-slate-800 ${styles.passage}`}>
                       {section.words.map((word) => (
                         <Word 
                           key={word.id}
@@ -478,7 +438,7 @@ const App = () => {
               </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-200 pt-20">
+            <div className="h-full flex flex-col items-center justify-center text-slate-200 pt-20 font-sans">
               <EyeOff size={64} strokeWidth={1} className="mb-4 opacity-20" />
               <p className="text-xl font-bold text-slate-300">Ready to memorize?</p>
               <p className="text-sm font-medium text-slate-300 mt-1 uppercase tracking-tighter">Choose a passage above</p>
@@ -486,7 +446,7 @@ const App = () => {
           )}
         </div>
 
-        <footer className="mt-12 text-center pb-20">
+        <footer className="mt-12 text-center pb-20 font-sans">
           <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">ESV® Bible • Crossway Publishing • {new Date().getFullYear()}</p>
         </footer>
       </div>
