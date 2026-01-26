@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -93,6 +93,10 @@ const App = () => {
   const [themeIdx, setThemeIdx] = useState(0);
   const [appBgIdx, setAppBgIdx] = useState(0);
 
+  // Library State (Recent and Favorites)
+  const [recentPassages, setRecentPassages] = useState([]);
+  const [favoritePassages, setFavoritePassages] = useState([]);
+
   // App Background Themes
   const APP_BGS = [
     { id: 'neutral', name: 'Neutral', container: 'bg-neutral-100', text: 'text-slate-900', muted: 'text-slate-400', border: 'border-slate-300' },
@@ -140,15 +144,14 @@ const App = () => {
     }
   };
 
-  const fetchPassage = async () => {
-    let finalQuery = searchMode === 'text' ? manualQuery : `${selBook} ${selChapter}:${selVerse}`;
+  const fetchPassage = async (overrideQuery = null) => {
+    let finalQuery = overrideQuery || (searchMode === 'text' ? manualQuery : `${selBook} ${selChapter}:${selVerse}`);
     setLoading(true);
     setError(null);
     setRevealedLetters({});
     resetWpm();
 
     try {
-      // Check for range patterns like "Galatians 1-3" or "Psalm 23"
       const isFullBook = BIBLE_DATA.some(b => b.book.toLowerCase() === finalQuery.trim().toLowerCase());
       const selectedBookMeta = BIBLE_DATA.find(b => b.book.toLowerCase() === finalQuery.trim().toLowerCase());
       
@@ -157,7 +160,6 @@ const App = () => {
       if (isFullBook && selectedBookMeta) {
         chaptersToFetch = Array.from({ length: selectedBookMeta.chapters }, (_, i) => `${selectedBookMeta.book} ${i + 1}`);
       } else {
-        // Basic check for chapter range in manual query like "Galatians 1-3"
         const rangeMatch = finalQuery.match(/^(.+?)\s+(\d+)\s*-\s*(\d+)$/);
         if (rangeMatch) {
           const bookName = rangeMatch[1];
@@ -206,11 +208,19 @@ const App = () => {
 
       if (sections.length === 0) throw new Error("Passage not found.");
 
+      const ref = isFullBook ? selectedBookMeta.book : (sections.length > 1 ? finalQuery : sections[0].title);
+      
       setVerseData({ 
-        reference: isFullBook ? selectedBookMeta.book : (sections.length > 1 ? finalQuery : sections[0].title), 
+        reference: ref, 
         sections: sections,
         allWords: allWords
       });
+
+      setRecentPassages(prev => {
+        const filtered = prev.filter(p => p !== ref);
+        return [ref, ...filtered].slice(0, 8);
+      });
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -222,6 +232,16 @@ const App = () => {
     setIsWpmPlaying(false);
     setCurrentWpmIndex(-1);
     setWpmCycleCount(0);
+  };
+
+  const toggleFavorite = () => {
+    if (!verseData) return;
+    setFavoritePassages(prev => {
+      if (prev.includes(verseData.reference)) {
+        return prev.filter(p => p !== verseData.reference);
+      }
+      return [verseData.reference, ...prev];
+    });
   };
 
   useEffect(() => {
@@ -301,6 +321,29 @@ const App = () => {
 
   return (
     <div className={`min-h-screen transition-all duration-700 p-4 md:p-10 font-sans ${appBg.container}`}>
+      <style>{`
+        ::-webkit-scrollbar {
+          width: 4px;
+          height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(100, 116, 139, 0.2);
+          border-radius: 20px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(100, 116, 139, 0.4);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
       <div className="max-w-4xl mx-auto">
         
         {/* Header - Dynamic visibility based on Environment */}
@@ -336,7 +379,7 @@ const App = () => {
         </div>
 
         {/* Control Panel */}
-        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 mb-8 font-sans">
+        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 mb-8 font-sans relative z-10">
           <div className="flex flex-col md:flex-row gap-6 items-end">
             <div className="flex-1 w-full">
               <div className="flex justify-end items-center mb-3">
@@ -376,12 +419,51 @@ const App = () => {
                   </div>
                 )}
                 
-                <button onClick={fetchPassage} disabled={loading} className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50">
+                <button onClick={() => fetchPassage()} disabled={loading} className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50">
                   {loading ? <RefreshCw className="animate-spin" size={20} /> : <ArrowRight size={24} />}
                 </button>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Quick Access Library Section */}
+        <div className="flex flex-col gap-4 mb-8 font-sans animate-in fade-in slide-in-from-top-4 w-full">
+          {favoritePassages.length > 0 && (
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 no-scrollbar w-full touch-pan-x scroll-smooth snap-x snap-mandatory">
+              <div className="sticky left-0 flex items-center gap-1.5 px-3 py-1.5 bg-rose-500 text-white rounded-full text-[10px] font-black uppercase tracking-widest shrink-0 shadow-sm z-10 snap-start">
+                <Star size={12} fill="white" />
+                Favorites
+              </div>
+              {favoritePassages.map(p => (
+                <button 
+                  key={p} 
+                  onClick={() => fetchPassage(p)}
+                  className={`px-4 py-1.5 bg-white/80 backdrop-blur-sm border border-rose-100 rounded-full text-xs font-bold text-slate-600 hover:border-rose-300 hover:text-rose-600 transition-all shrink-0 whitespace-nowrap shadow-sm snap-start`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {recentPassages.length > 0 && (
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 no-scrollbar w-full touch-pan-x scroll-smooth snap-x snap-mandatory">
+              <div className={`sticky left-0 flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-white rounded-full text-[10px] font-black uppercase tracking-widest shrink-0 shadow-sm z-10 snap-start`}>
+                <History size={12} />
+                Recent
+              </div>
+              {recentPassages.map(p => (
+                <button 
+                  key={p} 
+                  onClick={() => fetchPassage(p)}
+                  className={`px-4 py-1.5 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-full text-xs font-bold text-slate-500 hover:border-slate-400 hover:text-slate-800 transition-all shrink-0 whitespace-nowrap shadow-sm snap-start`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Sticky Memory Toolbar */}
@@ -474,13 +556,19 @@ const App = () => {
         <div className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-hidden transition-all duration-500 ${styles.container}`}>
           {verseData ? (
             <div className="animate-in fade-in zoom-in-95 duration-500">
-              <header className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans`}>
-                <div className="relative group">
+              <header className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans relative`}>
+                <div className="relative group flex items-center gap-4">
                   <h2 className={`text-2xl text-center ${styles.heading} ${paper.text}`}>
                     {verseData.reference}
                   </h2>
-                  <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
+                  <button 
+                    onClick={toggleFavorite}
+                    className={`transition-all active:scale-90 hover:scale-110 p-1.5 rounded-full ${favoritePassages.includes(verseData.reference) ? 'text-rose-500' : 'text-slate-300'}`}
+                  >
+                    <Heart size={20} fill={favoritePassages.includes(verseData.reference) ? "currentColor" : "none"} />
+                  </button>
                 </div>
+                <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
               </header>
               
               <div className="space-y-20">
@@ -518,6 +606,14 @@ const App = () => {
             </div>
           )}
         </div>
+
+        {/* Error Message Display */}
+        {error && (
+          <div className="mt-8 p-4 bg-red-50/80 backdrop-blur-md border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 font-sans animate-in slide-in-from-bottom-4 shadow-sm">
+            <AlertCircle size={20} />
+            <span className="font-bold text-sm uppercase tracking-tight">{error}</span>
+          </div>
+        )}
 
         <footer className="mt-12 text-center pb-20 font-sans">
           <p className={`text-[10px] font-bold uppercase tracking-widest transition-colors duration-300 ${appBg.muted}`}>ESV® Bible • Crossway Publishing • {new Date().getFullYear()}</p>
