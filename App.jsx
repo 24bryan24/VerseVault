@@ -385,7 +385,7 @@ const App = () => {
         </div>
 
         {/* Sticky Memory Toolbar */}
-        <div className="sticky top-4 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300">
+        <div className="sticky top-4 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300 mb-8">
           <div className="flex flex-col md:flex-row items-center gap-3 md:justify-between w-full">
             <div className="flex bg-white rounded-xl shadow-lg border border-slate-200 p-1 w-full md:w-auto justify-between md:justify-start overflow-x-auto">
               <button
