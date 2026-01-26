@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -26,6 +26,14 @@ const BIBLE_DATA = [
   { book: '2 Peter', chapters: 3 }, { book: '1 John', chapters: 5 }, { book: '2 John', chapters: 1 },
   { book: '3 John', chapters: 1 }, { book: 'Jude', chapters: 1 }, { book: 'Revelation', chapters: 22 }
 ];
+
+// Helper to determine testament
+const getTestament = (reference) => {
+  if (!reference) return 'Old Testament';
+  const bookName = reference.split(' ').slice(0, -1).join(' ').replace(/\s+\d+$/, '') || reference.split(' ')[0];
+  const otBooks = BIBLE_DATA.slice(0, 39).map(b => b.book);
+  return otBooks.includes(bookName) ? 'Old Testament' : 'New Testament';
+};
 
 // Optimized Word Component to prevent unnecessary re-renders during layout shifts
 const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, showUnderlines, onClick }) => {
@@ -92,6 +100,7 @@ const App = () => {
   const [bgOption, setBgOption] = useState('blank'); // blank, papyrus, notepad, ivory, charcoal
   const [themeIdx, setThemeIdx] = useState(0);
   const [appBgIdx, setAppBgIdx] = useState(0);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
   // Library State (Recent and Favorites)
   const [recentPassages, setRecentPassages] = useState([]);
@@ -150,6 +159,7 @@ const App = () => {
     setError(null);
     setRevealedLetters({});
     resetWpm();
+    setIsLibraryOpen(false);
 
     try {
       const isFullBook = BIBLE_DATA.some(b => b.book.toLowerCase() === finalQuery.trim().toLowerCase());
@@ -218,7 +228,7 @@ const App = () => {
 
       setRecentPassages(prev => {
         const filtered = prev.filter(p => p !== ref);
-        return [ref, ...filtered].slice(0, 8);
+        return [ref, ...filtered].slice(0, 15);
       });
 
     } catch (err) {
@@ -319,6 +329,16 @@ const App = () => {
   const styles = getCanvasStyles();
   const paper = getPaperStyles();
 
+  // Dashboard Grouping logic
+  const libraryGroups = useMemo(() => {
+    const combined = Array.from(new Set([...favoritePassages, ...recentPassages]));
+    const groups = {
+      'Old Testament': combined.filter(p => getTestament(p) === 'Old Testament'),
+      'New Testament': combined.filter(p => getTestament(p) === 'New Testament')
+    };
+    return groups;
+  }, [favoritePassages, recentPassages]);
+
   return (
     <div className={`min-h-screen transition-all duration-700 p-4 md:p-10 font-sans ${appBg.container}`}>
       <style>{`
@@ -355,6 +375,17 @@ const App = () => {
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             <button 
+              onClick={() => setIsLibraryOpen(!isLibraryOpen)}
+              className={`p-2.5 backdrop-blur-md border rounded-full shadow-sm transition-all active:scale-90 group ${
+                isLibraryOpen 
+                  ? 'bg-blue-600 border-blue-500 text-white' 
+                  : (appBgIdx === 0 ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-white/10 border-white/10 text-white hover:bg-white/20')
+              }`}
+              title="Open Library"
+            >
+              <Library size={18} className="group-hover:scale-110 transition-transform" />
+            </button>
+            <button 
               onClick={() => setAppBgIdx(prev => (prev + 1) % APP_BGS.length)}
               className={`p-2.5 backdrop-blur-md border rounded-full shadow-sm transition-all active:scale-90 group ${
                 appBgIdx === 0 
@@ -377,6 +408,64 @@ const App = () => {
             </div>
           </div>
         </div>
+
+        {/* Library Dashboard */}
+        {isLibraryOpen && (
+          <div className="mb-8 bg-white/90 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden animate-in zoom-in-95 fade-in duration-300 origin-top">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800 flex items-center gap-3">
+                  <Book className="text-blue-600" size={24} />
+                  Verse Library
+                </h2>
+                <button onClick={() => setIsLibraryOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-10">
+                {Object.entries(libraryGroups).map(([testament, passages]) => (
+                  <div key={testament} className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">{testament}</h3>
+                      <div className="h-px flex-1 bg-slate-100"></div>
+                    </div>
+                    {passages.length === 0 ? (
+                      <p className="text-xs italic text-slate-300 py-4">No verses tracked in this testament yet.</p>
+                    ) : (
+                      <div className="grid gap-2">
+                        {passages.map(p => (
+                          <button 
+                            key={p} 
+                            onClick={() => fetchPassage(p)}
+                            className="group flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl hover:border-blue-500 hover:shadow-lg hover:shadow-blue-50 transition-all text-left"
+                          >
+                            <span className="font-bold text-sm text-slate-700 group-hover:text-blue-600 transition-colors">{p}</span>
+                            <div className="flex items-center gap-2">
+                              {favoritePassages.includes(p) && <Star size={12} fill="#f43f5e" className="text-rose-500" />}
+                              <ChevronRight size={14} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-slate-50 p-4 px-8 border-t border-slate-100 flex justify-between items-center">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Showing {Array.from(new Set([...favoritePassages, ...recentPassages])).length} stored verses
+              </span>
+              <button 
+                onClick={() => { setRecentPassages([]); setFavoritePassages([]); }}
+                className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline"
+              >
+                Clear All Data
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Control Panel */}
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 mb-8 font-sans relative z-10">
