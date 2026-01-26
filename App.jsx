@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -89,6 +89,17 @@ const App = () => {
   const [showUnderlines, setShowUnderlines] = useState(true);
   const [revealedLetters, setRevealedLetters] = useState({});
   const [fontOption, setFontOption] = useState('modern'); // classic, modern, mono, elegant, bold
+  const [themeIdx, setThemeIdx] = useState(0);
+
+  // Themes Configuration
+  const THEMES = [
+    { id: 'blue', text: 'text-blue-600', bg: 'bg-blue-600', border: 'border-blue-500', shadow: 'shadow-blue-200', lightBg: 'bg-blue-50', focus: 'focus:border-blue-500' },
+    { id: 'amber', text: 'text-amber-600', bg: 'bg-amber-600', border: 'border-amber-500', shadow: 'shadow-amber-200', lightBg: 'bg-amber-50', focus: 'focus:border-amber-500' },
+    { id: 'rose', text: 'text-rose-600', bg: 'bg-rose-600', border: 'border-rose-500', shadow: 'shadow-rose-200', lightBg: 'bg-rose-50', focus: 'focus:border-rose-500' },
+    { id: 'emerald', text: 'text-emerald-600', bg: 'bg-emerald-600', border: 'border-emerald-500', shadow: 'shadow-emerald-200', lightBg: 'bg-emerald-50', focus: 'focus:border-emerald-500' },
+    { id: 'violet', text: 'text-violet-600', bg: 'bg-violet-600', border: 'border-violet-500', shadow: 'shadow-violet-200', lightBg: 'bg-violet-50', focus: 'focus:border-violet-500' }
+  ];
+  const theme = THEMES[themeIdx];
 
   // WPM State
   const [wpmValue, setWpmValue] = useState(50);
@@ -261,12 +272,21 @@ const App = () => {
         {/* Header - Fixed UI font */}
         <div className="mb-8 flex justify-between items-end font-sans">
           <div>
-            <h1 className="text-4xl font-black tracking-tighter text-slate-900 uppercase">
-              VERSE <span className="text-blue-600">VAULT</span>
+            <h1 className="text-4xl font-black tracking-tighter text-slate-900 uppercase transition-all duration-300">
+              VERSE <span className={`${theme.text}`}>VAULT</span>
             </h1>
           </div>
-          <div className="hidden sm:block text-[10px] font-bold text-slate-400 tracking-widest uppercase border-b-2 border-slate-200">
-            ESV API v3
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setThemeIdx(prev => (prev + 1) % THEMES.length)}
+              className="p-2.5 bg-white border border-slate-200 rounded-full shadow-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all active:scale-90 group"
+              title="Cycle Theme"
+            >
+              <Palette size={18} className="group-hover:rotate-12 transition-transform" />
+            </button>
+            <div className="hidden sm:block text-[10px] font-bold text-slate-400 tracking-widest uppercase border-b-2 border-slate-200 pb-0.5">
+              ESV API v3
+            </div>
           </div>
         </div>
 
@@ -277,7 +297,7 @@ const App = () => {
               <div className="flex justify-end items-center mb-3">
                 <button 
                   onClick={() => setSearchMode(searchMode === 'text' ? 'select' : 'text')}
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1.5 font-bold uppercase tracking-wider"
+                  className={`text-xs ${theme.text} hover:underline flex items-center gap-1.5 font-bold uppercase tracking-wider`}
                 >
                   {searchMode === 'text' ? <BookOpen size={14}/> : <Keyboard size={14}/>}
                   {searchMode === 'text' ? 'Browse Library' : 'Direct Entry'}
@@ -292,21 +312,21 @@ const App = () => {
                       value={manualQuery}
                       onChange={(e) => setManualQuery(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && fetchPassage()}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 pl-11 focus:border-blue-500 focus:bg-white outline-none transition-all font-medium"
+                      className={`w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 pl-11 outline-none transition-all font-medium ${theme.focus} focus:bg-white`}
                       placeholder="e.g. Galatians 1-3"
                     />
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                   </div>
                 ) : (
                   <div className="flex gap-2 w-full">
-                    <select value={selBook} onChange={(e) => setSelBook(e.target.value)} className="flex-[2] bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500">
+                    <select value={selBook} onChange={(e) => setSelBook(e.target.value)} className={`flex-[2] bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none ${theme.focus}`}>
                       {BIBLE_DATA.map(b => <option key={b.book} value={b.book}>{b.book}</option>)}
                     </select>
-                    <select value={selChapter} onChange={(e) => setSelChapter(e.target.value)} className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500">
+                    <select value={selChapter} onChange={(e) => setSelChapter(e.target.value)} className={`flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none ${theme.focus}`}>
                       {chaptersList.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <div className="flex-1 relative">
-                      <input type="number" value={selVerse} onChange={(e) => setSelVerse(e.target.value)} placeholder="V" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none focus:border-blue-500" />
+                      <input type="number" value={selVerse} onChange={(e) => setSelVerse(e.target.value)} placeholder="V" className={`w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none ${theme.focus}`} />
                     </div>
                   </div>
                 )}
@@ -332,7 +352,7 @@ const App = () => {
               <button
                 onClick={() => { setVisibilityMode('full'); resetWpm(); }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
-                  visibilityMode === 'full' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
+                  visibilityMode === 'full' ? `${theme.bg} text-white shadow-lg ${theme.shadow}` : 'text-slate-400 hover:bg-slate-50'
                 }`}
               >
                 <Eye size={16} />
@@ -342,7 +362,7 @@ const App = () => {
                   key={id}
                   onClick={() => { setVisibilityMode(id); resetWpm(); }}
                   className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-                    visibilityMode === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
+                    visibilityMode === id ? `${theme.bg} text-white shadow-lg ${theme.shadow}` : 'text-slate-400 hover:bg-slate-50'
                   }`}
                 >
                   <span className="font-black text-sm">{id}L</span>
@@ -384,17 +404,17 @@ const App = () => {
           {visibilityMode === 'wpm' && (
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 py-3 border-t border-slate-200/50 animate-in slide-in-from-top-2">
               <div className="flex gap-1 bg-white p-1 rounded-xl border border-slate-100 shadow-sm">
-                <button onClick={toggleWpmValue} className="px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-blue-600 hover:bg-blue-100 transition-colors">{wpmValue} WPM</button>
-                <button onClick={toggleCycleTarget} className="px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-blue-600 hover:bg-blue-100 transition-colors">{wpmCycleTarget} CYCLES</button>
+                <button onClick={toggleWpmValue} className={`px-4 py-1.5 ${theme.lightBg} border ${theme.border} border-opacity-30 rounded-lg text-[10px] font-black ${theme.text} hover:opacity-80 transition-opacity`}>{wpmValue} WPM</button>
+                <button onClick={toggleCycleTarget} className={`px-4 py-1.5 ${theme.lightBg} border ${theme.border} border-opacity-30 rounded-lg text-[10px] font-black ${theme.text} hover:opacity-80 transition-opacity`}>{wpmCycleTarget} CYCLES</button>
               </div>
               
               <div className="flex items-center gap-6">
-                <div className="text-[10px] font-black text-white tracking-widest uppercase bg-blue-600 px-4 py-1.5 rounded-full border border-blue-700 shadow-sm">
+                <div className={`text-[10px] font-black text-white tracking-widest uppercase ${theme.bg} px-4 py-1.5 rounded-full border border-black/10 shadow-sm`}>
                   CYCLE {wpmCycleCount} / {wpmCycleTarget}
                 </div>
                 <button 
                   onClick={() => setIsWpmPlaying(!isWpmPlaying)} 
-                  className={`p-3 rounded-full transition-all shadow-md active:scale-95 ${isWpmPlaying ? 'bg-slate-900 text-white ring-4 ring-slate-100' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'}`}
+                  className={`p-3 rounded-full transition-all shadow-md active:scale-95 ${isWpmPlaying ? 'bg-slate-900 text-white ring-4 ring-slate-100' : `${theme.bg} text-white hover:opacity-90 shadow-lg ${theme.shadow}`}`}
                 >
                   {isWpmPlaying ? <Square size={18} fill="currentColor" /> : <Play size={18} className="ml-0.5" fill="currentColor" />}
                 </button>
@@ -413,7 +433,7 @@ const App = () => {
                   <h2 className={`text-2xl text-slate-900 text-center ${styles.heading}`}>
                     {verseData.reference}
                   </h2>
-                  <div className="w-12 h-1 bg-blue-500 mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125"></div>
+                  <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
                 </div>
               </header>
               
@@ -421,11 +441,11 @@ const App = () => {
                 {verseData.sections.map((section, sIdx) => (
                   <div key={sIdx} className="animate-in fade-in duration-700">
                     <div className="flex items-center gap-4 mb-8">
-                      <div className="w-1 h-8 bg-blue-600 rounded-full"></div>
-                      <h3 className={`text-xl text-blue-600 capitalize ${styles.heading}`}>
+                      <div className={`w-1 h-8 ${theme.bg} rounded-full`}></div>
+                      <h3 className={`text-xl ${theme.text} capitalize ${styles.heading}`}>
                         {section.title}
                       </h3>
-                      <div className="flex-1 h-px bg-blue-100"></div>
+                      <div className={`flex-1 h-px ${theme.lightBg}`}></div>
                     </div>
                     <div className={`flex flex-wrap ${showUnderlines ? 'gap-x-4 gap-y-6' : 'gap-x-1.5 gap-y-4'} text-2xl md:text-3xl font-medium text-slate-800 ${styles.passage}`}>
                       {section.words.map((word) => (
