@@ -32,7 +32,6 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
   const baseVisibility = visibilityMode === 'full' ? 99 : parseInt(visibilityMode);
   const extraReveal = revealedLetters[word.id] || 0;
   const totalVisible = baseVisibility + extraReveal;
-  // Surgical Edit: Changed logic to <= to create a "Revealer" effect instead of a single word flasher
   const charVisibleMode = visibilityMode === 'wpm' && word.id <= currentWpmIndex;
 
   let alphanumericCounter = 0;
@@ -443,7 +442,7 @@ const App = () => {
                 }`}
               >
                 {showUnderlines ? <AlignLeft size={14} /> : <Grid3X3 size={14} />}
-                {showUnderlines ? 'No Underline' : 'Underline'}
+                {showUnderlines ? 'No Lines' : 'Lines'}
               </button>
             </div>
           </div>
