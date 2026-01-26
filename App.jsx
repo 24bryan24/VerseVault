@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -32,7 +32,6 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
   const baseVisibility = visibilityMode === 'full' ? 99 : parseInt(visibilityMode);
   const extraReveal = revealedLetters[word.id] || 0;
   const totalVisible = baseVisibility + extraReveal;
-  // Surgical Edit: Changed logic to <= to create a "Revealer" effect instead of a single word flasher
   const charVisibleMode = visibilityMode === 'wpm' && word.id <= currentWpmIndex;
 
   let alphanumericCounter = 0;
@@ -92,6 +91,18 @@ const App = () => {
   const [fontOption, setFontOption] = useState('modern'); // classic, modern, mono, elegant, bold
   const [bgOption, setBgOption] = useState('blank'); // blank, papyrus, notepad, ivory, charcoal
   const [themeIdx, setThemeIdx] = useState(0);
+  const [appBgIdx, setAppBgIdx] = useState(0);
+
+  // App Background Themes
+  const APP_BGS = [
+    { id: 'neutral', name: 'Neutral', container: 'bg-neutral-100', text: 'text-slate-900', muted: 'text-slate-400', border: 'border-slate-300' },
+    { id: 'forest', name: 'Forest Mist', container: 'bg-gradient-to-br from-emerald-800 via-teal-900 to-slate-950', text: 'text-emerald-50', muted: 'text-emerald-400/60', border: 'border-emerald-700/50' },
+    { id: 'sunset', name: 'Golden Hour', container: 'bg-gradient-to-br from-orange-500 via-rose-600 to-indigo-900', text: 'text-orange-50', muted: 'text-orange-200/50', border: 'border-orange-400/30' },
+    { id: 'ocean', name: 'Deep Sea', container: 'bg-gradient-to-br from-blue-700 via-indigo-900 to-black', text: 'text-blue-50', muted: 'text-blue-400/50', border: 'border-blue-800' },
+    { id: 'bloom', name: 'Spring Bloom', container: 'bg-gradient-to-tr from-pink-100 via-emerald-50 to-blue-100', text: 'text-emerald-950', muted: 'text-emerald-800/40', border: 'border-emerald-200' },
+    { id: 'midnight', name: 'Midnight', container: 'bg-slate-950', text: 'text-slate-100', muted: 'text-slate-600', border: 'border-slate-800' }
+  ];
+  const appBg = APP_BGS[appBgIdx];
 
   // Themes Configuration
   const THEMES = [
@@ -255,7 +266,6 @@ const App = () => {
 
   const handleWordClick = (wordGlobalIdx) => {
     if (visibilityMode === 'full') return;
-    // Surgical Edit: Allow clicking to jump the WPM playhead while maintaining the current pause/playing state
     if (visibilityMode === 'wpm') {
       setCurrentWpmIndex(wordGlobalIdx);
       return;
@@ -290,17 +300,28 @@ const App = () => {
   const paper = getPaperStyles();
 
   return (
-    <div className={`min-h-screen bg-neutral-50 text-slate-900 p-4 md:p-10 font-sans`}>
+    <div className={`min-h-screen transition-all duration-700 p-4 md:p-10 font-sans ${appBg.container}`}>
       <div className="max-w-4xl mx-auto">
         
-        {/* Header - Fixed UI font */}
+        {/* Header - Dynamic visibility based on Environment */}
         <div className="mb-8 flex justify-between items-end font-sans">
           <div>
-            <h1 className="text-4xl font-black tracking-tighter text-slate-900 uppercase transition-all duration-300">
+            <h1 className={`text-4xl font-black tracking-tighter uppercase transition-all duration-300 ${appBg.text}`}>
               VERSE <span className={`${theme.text}`}>VAULT</span>
             </h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <button 
+              onClick={() => setAppBgIdx(prev => (prev + 1) % APP_BGS.length)}
+              className={`p-2.5 backdrop-blur-md border rounded-full shadow-sm transition-all active:scale-90 group ${
+                appBgIdx === 0 
+                  ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' 
+                  : 'bg-white/10 border-white/10 text-white hover:bg-white/20'
+              }`}
+              title={`Cycle Environment: ${appBg.name}`}
+            >
+              <Mountain size={18} className="group-hover:translate-y-[-1px] transition-transform" />
+            </button>
             <button 
               onClick={() => setThemeIdx(prev => (prev + 1) % THEMES.length)}
               className="p-2.5 bg-white border border-slate-200 rounded-full shadow-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all active:scale-90 group"
@@ -308,7 +329,7 @@ const App = () => {
             >
               <Palette size={18} className="group-hover:rotate-12 transition-transform" />
             </button>
-            <div className="hidden sm:block text-[10px] font-bold text-slate-400 tracking-widest uppercase border-b-2 border-slate-200 pb-0.5">
+            <div className={`hidden sm:block text-[10px] font-bold tracking-widest uppercase border-b-2 pb-0.5 transition-colors duration-300 ${appBg.muted} ${appBg.border}`}>
               ESV API v3
             </div>
           </div>
@@ -361,12 +382,6 @@ const App = () => {
               </div>
             </div>
           </div>
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-sm font-bold animate-in slide-in-from-top-2">
-              <AlertCircle size={16} />
-              {error}
-            </div>
-          )}
         </div>
 
         {/* Sticky Memory Toolbar */}
@@ -432,7 +447,7 @@ const App = () => {
             </div>
           </div>
 
-          {/* WPM Reader HUD - Sticky Integration */}
+          {/* WPM Reader HUD */}
           {visibilityMode === 'wpm' && (
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 py-3 border-t border-slate-200/50 animate-in slide-in-from-top-2">
               <div className="flex gap-1 bg-white p-1 rounded-xl border border-slate-100 shadow-sm">
@@ -459,7 +474,6 @@ const App = () => {
         <div className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-hidden transition-all duration-500 ${styles.container}`}>
           {verseData ? (
             <div className="animate-in fade-in zoom-in-95 duration-500">
-              {/* Prominent Centered Header */}
               <header className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans`}>
                 <div className="relative group">
                   <h2 className={`text-2xl text-center ${styles.heading} ${paper.text}`}>
@@ -506,7 +520,7 @@ const App = () => {
         </div>
 
         <footer className="mt-12 text-center pb-20 font-sans">
-          <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">ESV® Bible • Crossway Publishing • {new Date().getFullYear()}</p>
+          <p className={`text-[10px] font-bold uppercase tracking-widest transition-colors duration-300 ${appBg.muted}`}>ESV® Bible • Crossway Publishing • {new Date().getFullYear()}</p>
         </footer>
       </div>
     </div>
