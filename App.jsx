@@ -32,6 +32,7 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
   const baseVisibility = visibilityMode === 'full' ? 99 : parseInt(visibilityMode);
   const extraReveal = revealedLetters[word.id] || 0;
   const totalVisible = baseVisibility + extraReveal;
+  // Surgical Edit: Changed logic to <= to create a "Revealer" effect instead of a single word flasher
   const charVisibleMode = visibilityMode === 'wpm' && word.id <= currentWpmIndex;
 
   let alphanumericCounter = 0;
@@ -421,27 +422,27 @@ const App = () => {
             <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end">
               <button
                 onClick={cycleFont}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
               >
-                <CaseSensitive size={16} />
+                <CaseSensitive size={14} />
                 {fontOption}
               </button>
 
               <button
                 onClick={cycleBg}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
               >
-                <Paintbrush size={16} />
+                <Paintbrush size={14} />
                 {bgOption}
               </button>
 
               <button
                 onClick={() => setShowUnderlines(!showUnderlines)}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
                   showUnderlines ? 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50' : 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200'
                 }`}
               >
-                {showUnderlines ? <AlignLeft size={16} /> : <Grid3X3 size={16} />}
+                {showUnderlines ? <AlignLeft size={14} /> : <Grid3X3 size={14} />}
                 {showUnderlines ? 'No Underline' : 'Underline'}
               </button>
             </div>
