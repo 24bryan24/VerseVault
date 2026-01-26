@@ -32,7 +32,8 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
   const baseVisibility = visibilityMode === 'full' ? 99 : parseInt(visibilityMode);
   const extraReveal = revealedLetters[word.id] || 0;
   const totalVisible = baseVisibility + extraReveal;
-  const charVisibleMode = visibilityMode === 'wpm' && word.id === currentWpmIndex;
+  // Surgical Edit: Changed logic to <= to create a "Revealer" effect instead of a single word flasher
+  const charVisibleMode = visibilityMode === 'wpm' && word.id <= currentWpmIndex;
 
   let alphanumericCounter = 0;
 
@@ -246,7 +247,13 @@ const App = () => {
   };
 
   const handleWordClick = (wordGlobalIdx) => {
-    if (visibilityMode === 'full' || visibilityMode === 'wpm') return;
+    if (visibilityMode === 'full') return;
+    // Surgical Edit: Allow clicking to jump the WPM playhead and start/resume playback
+    if (visibilityMode === 'wpm') {
+      setCurrentWpmIndex(wordGlobalIdx);
+      setIsWpmPlaying(true);
+      return;
+    }
     setRevealedLetters(prev => ({
       ...prev,
       [wordGlobalIdx]: (prev[wordGlobalIdx] || 0) + 1
