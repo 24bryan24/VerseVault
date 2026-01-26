@@ -326,57 +326,81 @@ const App = () => {
         </div>
 
         {/* Sticky Memory Toolbar */}
-        <div className="sticky top-4 z-50 flex flex-col md:flex-row items-center gap-3 md:justify-between bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20">
-          <div className="flex bg-white rounded-xl shadow-lg border border-slate-200 p-1 w-full md:w-auto justify-between md:justify-start overflow-x-auto">
-            <button
-              onClick={() => { setVisibilityMode('full'); resetWpm(); }}
-              className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
-                visibilityMode === 'full' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
-              }`}
-            >
-              <Eye size={16} />
-            </button>
-            {['1', '2', '3'].map((id) => (
+        <div className="sticky top-4 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300">
+          <div className="flex flex-col md:flex-row items-center gap-3 md:justify-between w-full">
+            <div className="flex bg-white rounded-xl shadow-lg border border-slate-200 p-1 w-full md:w-auto justify-between md:justify-start overflow-x-auto">
               <button
-                key={id}
-                onClick={() => { setVisibilityMode(id); resetWpm(); }}
-                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-                  visibilityMode === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
+                onClick={() => { setVisibilityMode('full'); resetWpm(); }}
+                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
+                  visibilityMode === 'full' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
                 }`}
               >
-                <span className="font-black text-sm">{id}L</span>
+                <Eye size={16} />
               </button>
-            ))}
-            <button
-              onClick={() => { setVisibilityMode('wpm'); }}
-              className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 border-l border-slate-100 ml-1 ${
-                visibilityMode === 'wpm' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-400 hover:bg-slate-50'
-              }`}
-            >
-              <Timer size={14} />
-              WPM
-            </button>
+              {['1', '2', '3'].map((id) => (
+                <button
+                  key={id}
+                  onClick={() => { setVisibilityMode(id); resetWpm(); }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
+                    visibilityMode === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="font-black text-sm">{id}L</span>
+                </button>
+              ))}
+              <button
+                onClick={() => { setVisibilityMode('wpm'); }}
+                className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 border-l border-slate-100 ml-1 ${
+                  visibilityMode === 'wpm' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-400 hover:bg-slate-50'
+                }`}
+              >
+                <Timer size={14} />
+                WPM
+              </button>
+            </div>
+
+            <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end">
+              <button
+                onClick={cycleFont}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
+              >
+                <CaseSensitive size={16} />
+                {fontOption}
+              </button>
+
+              <button
+                onClick={() => setShowUnderlines(!showUnderlines)}
+                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
+                  showUnderlines ? 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50' : 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200'
+                }`}
+              >
+                {showUnderlines ? <AlignLeft size={16} /> : <Grid3X3 size={16} />}
+                {showUnderlines ? 'No Underline' : 'Underline'}
+              </button>
+            </div>
           </div>
 
-          <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end">
-            <button
-              onClick={cycleFont}
-              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
-            >
-              <CaseSensitive size={16} />
-              {fontOption}
-            </button>
-
-            <button
-              onClick={() => setShowUnderlines(!showUnderlines)}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
-                showUnderlines ? 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50' : 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200'
-              }`}
-            >
-              {showUnderlines ? <AlignLeft size={16} /> : <Grid3X3 size={16} />}
-              {showUnderlines ? 'No Underline' : 'Underline'}
-            </button>
-          </div>
+          {/* WPM Reader HUD - Sticky Integration */}
+          {visibilityMode === 'wpm' && (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 py-3 border-t border-slate-200/50 animate-in slide-in-from-top-2">
+              <div className="flex gap-1 bg-white p-1 rounded-xl border border-slate-100 shadow-sm">
+                <button onClick={toggleWpmValue} className="px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-blue-600 hover:bg-blue-100 transition-colors">{wpmValue} WPM</button>
+                <button onClick={toggleCycleTarget} className="px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-blue-600 hover:bg-blue-100 transition-colors">{wpmCycleTarget} CYCLES</button>
+              </div>
+              
+              <div className="flex items-center gap-6">
+                <div className="text-[10px] font-black text-white tracking-widest uppercase bg-blue-600 px-4 py-1.5 rounded-full border border-blue-700 shadow-sm">
+                  CYCLE {wpmCycleCount} / {wpmCycleTarget}
+                </div>
+                <button 
+                  onClick={() => setIsWpmPlaying(!isWpmPlaying)} 
+                  className={`p-3 rounded-full transition-all shadow-md active:scale-95 ${isWpmPlaying ? 'bg-slate-900 text-white ring-4 ring-slate-100' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'}`}
+                >
+                  {isWpmPlaying ? <Square size={18} fill="currentColor" /> : <Play size={18} className="ml-0.5" fill="currentColor" />}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Verse Canvas */}
@@ -384,29 +408,13 @@ const App = () => {
           {verseData ? (
             <div className="animate-in fade-in zoom-in-95 duration-500">
               {/* Prominent Centered Header */}
-              <header className="flex flex-col items-center justify-center mb-16 pb-8 border-b border-slate-50">
+              <header className="flex flex-col items-center justify-center mb-16 pb-8 border-b border-slate-50 font-sans">
                 <div className="relative group">
                   <h2 className={`text-2xl text-slate-900 text-center ${styles.heading}`}>
                     {verseData.reference}
                   </h2>
                   <div className="w-12 h-1 bg-blue-500 mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125"></div>
                 </div>
-
-                {/* WPM Reader HUD */}
-                {visibilityMode === 'wpm' && (
-                  <div className="mt-8 flex flex-col items-center gap-3 animate-in slide-in-from-top-4 font-sans">
-                    <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
-                      <button onClick={toggleWpmValue} className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 hover:bg-slate-50">{wpmValue} WPM</button>
-                      <button onClick={toggleCycleTarget} className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 hover:bg-slate-50">{wpmCycleTarget} CYCLES</button>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-[10px] font-black text-slate-400 tracking-widest uppercase">CYCLE {wpmCycleCount} / {wpmCycleTarget}</div>
-                      <button onClick={() => setIsWpmPlaying(!isWpmPlaying)} className={`p-3 rounded-full transition-all shadow-xl ${isWpmPlaying ? 'bg-slate-900 text-white' : 'bg-indigo-600 text-white'}`}>
-                        {isWpmPlaying ? <Square size={20} fill="currentColor" /> : <Play size={20} className="ml-0.5" />}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </header>
               
               <div className="space-y-20">
