@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -34,6 +34,89 @@ const getTestament = (reference) => {
   const otBooks = BIBLE_DATA.slice(0, 39).map(b => b.book);
   return otBooks.includes(bookName) ? 'Old Testament' : 'New Testament';
 };
+
+// Library Item Component with Preview Logic
+const LibraryItem = memo(({ passage, onSelect, isFavorite, theme, API_TOKEN }) => {
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewText, setPreviewText] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchPreview = async () => {
+    if (previewText) return;
+    setLoading(true);
+    try {
+      const url = `https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(passage)}&include-headings=false&include-footnotes=false&include-verse-numbers=false&include-short-copyright=false&include-passage-references=false`;
+      const res = await fetch(url, { headers: { 'Authorization': `Token ${API_TOKEN}` } });
+      const data = await res.json();
+      setPreviewText(data.passages?.[0]?.trim() || "Preview unavailable.");
+    } catch (e) {
+      setPreviewText("Failed to load preview.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (window.innerWidth >= 768) {
+      setShowPreview(true);
+      fetchPreview();
+    }
+  };
+
+  const handleToggle = (e) => {
+    e.stopPropagation();
+    setShowPreview(!showPreview);
+    if (!showPreview) fetchPreview();
+  };
+
+  const hoverBorderClass = theme.border ? theme.border.replace('border-', 'hover:border-') : 'hover:border-blue-500';
+  const hoverShadowClass = theme.shadow ? theme.shadow.replace('shadow-', 'hover:shadow-') : 'hover:shadow-blue-50';
+
+  return (
+    <div 
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => { if (window.innerWidth >= 768) setShowPreview(false); }}
+    >
+      <div className={`group flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl hover:shadow-lg transition-all text-left ${hoverBorderClass} ${hoverShadowClass}`}>
+        <button 
+          onClick={() => onSelect(passage)}
+          className="flex-1 font-bold text-sm text-slate-700 group-hover:text-blue-600 transition-colors text-left"
+        >
+          {passage}
+        </button>
+        <div className="flex items-center gap-2">
+          {isFavorite && <Star size={12} fill="#f43f5e" className="text-rose-500" />}
+          <button 
+            onClick={handleToggle}
+            className="md:hidden p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
+          >
+            <ChevronDown size={14} className={`transition-transform duration-200 ${showPreview ? 'rotate-180' : ''}`} />
+          </button>
+          <ChevronRight size={14} className="text-slate-300 hidden md:block group-hover:translate-x-1 transition-transform" />
+        </div>
+      </div>
+      
+      {showPreview && (
+        <div className="absolute z-[100] top-[calc(100%+8px)] left-0 right-0 p-4 bg-white rounded-3xl shadow-2xl border border-slate-200/60 animate-in fade-in zoom-in-95 duration-200 pointer-events-none">
+          <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${theme.bg}`}></div>
+          <div className="pl-3">
+            <div className="text-[11px] leading-relaxed text-slate-600 font-medium max-h-32 overflow-y-auto no-scrollbar italic">
+              {loading ? (
+                <div className="flex items-center gap-2 not-italic">
+                  <RefreshCw size={10} className="animate-spin text-blue-500" />
+                  Fetching scripture...
+                </div>
+              ) : (
+                `"${previewText}"`
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 // Optimized Word Component to prevent unnecessary re-renders during layout shifts
 const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, showUnderlines, onClick }) => {
@@ -102,9 +185,12 @@ const App = () => {
   const [appBgIdx, setAppBgIdx] = useState(0);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
-  // Library State (Recent and Favorites)
+  // Library State
   const [recentPassages, setRecentPassages] = useState([]);
   const [favoritePassages, setFavoritePassages] = useState([]);
+  const [expandedBooks, setExpandedBooks] = useState(new Set());
+  const [showAllOT, setShowAllOT] = useState(false);
+  const [showAllNT, setShowAllNT] = useState(false);
 
   // App Background Themes
   const APP_BGS = [
@@ -254,6 +340,15 @@ const App = () => {
     });
   };
 
+  const toggleBookExpansion = (book) => {
+    setExpandedBooks(prev => {
+      const next = new Set(prev);
+      if (next.has(book)) next.delete(book);
+      else next.add(book);
+      return next;
+    });
+  };
+
   useEffect(() => {
     let interval;
     if (visibilityMode === 'wpm' && isWpmPlaying && verseData?.allWords) {
@@ -329,14 +424,22 @@ const App = () => {
   const styles = getCanvasStyles();
   const paper = getPaperStyles();
 
-  // Dashboard Grouping logic
+  // Dashboard Grouping logic with Book Delineation
   const libraryGroups = useMemo(() => {
     const combined = Array.from(new Set([...favoritePassages, ...recentPassages]));
-    const groups = {
-      'Old Testament': combined.filter(p => getTestament(p) === 'Old Testament'),
-      'New Testament': combined.filter(p => getTestament(p) === 'New Testament')
+    const structure = {
+      'Old Testament': {},
+      'New Testament': {}
     };
-    return groups;
+    
+    combined.forEach(p => {
+      const testament = getTestament(p);
+      const bookName = p.split(' ').slice(0, -1).join(' ').replace(/\s+\d+$/, '') || p.split(' ')[0];
+      if (!structure[testament][bookName]) structure[testament][bookName] = [];
+      structure[testament][bookName].push(p);
+    });
+    
+    return structure;
   }, [favoritePassages, recentPassages]);
 
   return (
@@ -378,7 +481,7 @@ const App = () => {
               onClick={() => setIsLibraryOpen(!isLibraryOpen)}
               className={`p-2.5 backdrop-blur-md border rounded-full shadow-sm transition-all active:scale-90 group ${
                 isLibraryOpen 
-                  ? 'bg-blue-600 border-blue-500 text-white' 
+                  ? `${theme.bg} ${theme.border} text-white` 
                   : (appBgIdx === 0 ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-white/10 border-white/10 text-white hover:bg-white/20')
               }`}
               title="Open Library"
@@ -415,7 +518,7 @@ const App = () => {
             <div className="p-8">
               <div className="flex justify-between items-center mb-8">
                 <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800 flex items-center gap-3">
-                  <Book className="text-blue-600" size={24} />
+                  <Book className={theme.text} size={24} />
                   Verse Library
                 </h2>
                 <button onClick={() => setIsLibraryOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
@@ -424,33 +527,70 @@ const App = () => {
               </div>
 
               <div className="grid md:grid-cols-2 gap-10">
-                {Object.entries(libraryGroups).map(([testament, passages]) => (
-                  <div key={testament} className="space-y-4">
-                    <div className="flex items-center gap-4">
-                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">{testament}</h3>
-                      <div className="h-px flex-1 bg-slate-100"></div>
-                    </div>
-                    {passages.length === 0 ? (
-                      <p className="text-xs italic text-slate-300 py-4">No verses tracked in this testament yet.</p>
-                    ) : (
-                      <div className="grid gap-2">
-                        {passages.map(p => (
-                          <button 
-                            key={p} 
-                            onClick={() => fetchPassage(p)}
-                            className="group flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl hover:border-blue-500 hover:shadow-lg hover:shadow-blue-50 transition-all text-left"
-                          >
-                            <span className="font-bold text-sm text-slate-700 group-hover:text-blue-600 transition-colors">{p}</span>
-                            <div className="flex items-center gap-2">
-                              {favoritePassages.includes(p) && <Star size={12} fill="#f43f5e" className="text-rose-500" />}
-                              <ChevronRight size={14} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
-                            </div>
-                          </button>
-                        ))}
+                {Object.entries(libraryGroups).map(([testament, books]) => {
+                  const bookEntries = Object.entries(books);
+                  const isOT = testament === 'Old Testament';
+                  const showAll = isOT ? showAllOT : showAllNT;
+                  const visibleBooks = showAll ? bookEntries : bookEntries.slice(0, 6);
+
+                  return (
+                    <div key={testament} className="space-y-6">
+                      <div className="flex items-center gap-4">
+                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">{testament}</h3>
+                        <div className="h-px flex-1 bg-slate-100"></div>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      {bookEntries.length === 0 ? (
+                        <p className="text-xs italic text-slate-300 py-4">No verses tracked in this testament yet.</p>
+                      ) : (
+                        <div className="space-y-6">
+                          {visibleBooks.map(([book, passages]) => {
+                            const hasMultiple = passages.length > 1;
+                            const isExpanded = expandedBooks.has(book);
+                            
+                            return (
+                              <div key={book} className="space-y-2">
+                                {hasMultiple ? (
+                                  <button 
+                                    onClick={() => toggleBookExpansion(book)}
+                                    className={`w-full flex items-center justify-between text-[10px] font-black uppercase tracking-tighter pl-1 py-1 ${theme.text} opacity-70 hover:opacity-100 transition-opacity`}
+                                  >
+                                    <span>{book} ({passages.length})</span>
+                                    <ChevronDown size={12} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                  </button>
+                                ) : (
+                                  <h4 className={`text-[10px] font-black uppercase tracking-tighter pl-1 ${theme.text} opacity-70`}>{book}</h4>
+                                )}
+                                
+                                {(!hasMultiple || isExpanded) && (
+                                  <div className="grid gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                    {passages.map(p => (
+                                      <LibraryItem 
+                                        key={p}
+                                        passage={p}
+                                        onSelect={fetchPassage}
+                                        isFavorite={favoritePassages.includes(p)}
+                                        theme={theme}
+                                        API_TOKEN={API_TOKEN}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {bookEntries.length > 6 && (
+                            <button 
+                              onClick={() => isOT ? setShowAllOT(!showAllOT) : setShowAllNT(!showAllNT)}
+                              className={`w-full py-2 text-[10px] font-black uppercase tracking-[0.2em] border border-dashed rounded-xl transition-all ${theme.text} ${theme.lightBg} border-blue-200 hover:opacity-80`}
+                            >
+                              {showAll ? 'Show Less' : `+ Show ${bookEntries.length - 6} More Books`}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="bg-slate-50 p-4 px-8 border-t border-slate-100 flex justify-between items-center">
@@ -458,7 +598,7 @@ const App = () => {
                 Showing {Array.from(new Set([...favoritePassages, ...recentPassages])).length} stored verses
               </span>
               <button 
-                onClick={() => { setRecentPassages([]); setFavoritePassages([]); }}
+                onClick={() => { setRecentPassages([]); setFavoritePassages([]); setExpandedBooks(new Set()); }}
                 className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline"
               >
                 Clear All Data
