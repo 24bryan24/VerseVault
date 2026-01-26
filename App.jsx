@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -90,6 +90,7 @@ const App = () => {
   const [showUnderlines, setShowUnderlines] = useState(true);
   const [revealedLetters, setRevealedLetters] = useState({});
   const [fontOption, setFontOption] = useState('modern'); // classic, modern, mono, elegant, bold
+  const [bgOption, setBgOption] = useState('blank'); // blank, papyrus, notepad, ivory, charcoal
   const [themeIdx, setThemeIdx] = useState(0);
 
   // Themes Configuration
@@ -246,6 +247,12 @@ const App = () => {
     setFontOption(options[nextIdx]);
   };
 
+  const cycleBg = () => {
+    const options = ['blank', 'papyrus', 'notepad', 'ivory', 'charcoal'];
+    const nextIdx = (options.indexOf(bgOption) + 1) % options.length;
+    setBgOption(options[nextIdx]);
+  };
+
   const handleWordClick = (wordGlobalIdx) => {
     if (visibilityMode === 'full') return;
     // Surgical Edit: Allow clicking to jump the WPM playhead while maintaining the current pause/playing state
@@ -269,7 +276,18 @@ const App = () => {
     }
   };
 
+  const getPaperStyles = () => {
+    switch(bgOption) {
+      case 'papyrus': return { paper: 'bg-[#f4e4bc] border-[#d9c59a] shadow-[inset_0_0_50px_rgba(0,0,0,0.1)]', text: 'text-[#4a3721]' };
+      case 'notepad': return { paper: 'bg-white border-[#e2e8f0] bg-[linear-gradient(transparent_0%,transparent_96%,#cbd5e1_96%)] bg-[length:100%_3rem] shadow-sm', text: 'text-slate-800' };
+      case 'ivory': return { paper: 'bg-[#fdfcf0] border-[#f2f1e1] shadow-sm', text: 'text-slate-700' };
+      case 'charcoal': return { paper: 'bg-slate-900 border-slate-800 shadow-2xl', text: 'text-slate-100' };
+      default: return { paper: 'bg-white border-slate-100 shadow-2xl', text: 'text-slate-800' };
+    }
+  };
+
   const styles = getCanvasStyles();
+  const paper = getPaperStyles();
 
   return (
     <div className={`min-h-screen bg-neutral-50 text-slate-900 p-4 md:p-10 font-sans`}>
@@ -395,6 +413,14 @@ const App = () => {
               </button>
 
               <button
+                onClick={cycleBg}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
+              >
+                <Paintbrush size={16} />
+                {bgOption}
+              </button>
+
+              <button
                 onClick={() => setShowUnderlines(!showUnderlines)}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
                   showUnderlines ? 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50' : 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200'
@@ -430,13 +456,13 @@ const App = () => {
         </div>
 
         {/* Verse Canvas */}
-        <div className={`bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200 border border-slate-100 p-8 md:p-16 min-h-[450px] relative overflow-hidden ${styles.container}`}>
+        <div className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-hidden transition-all duration-500 ${styles.container}`}>
           {verseData ? (
             <div className="animate-in fade-in zoom-in-95 duration-500">
               {/* Prominent Centered Header */}
-              <header className="flex flex-col items-center justify-center mb-16 pb-8 border-b border-slate-50 font-sans">
+              <header className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans`}>
                 <div className="relative group">
-                  <h2 className={`text-2xl text-slate-900 text-center ${styles.heading}`}>
+                  <h2 className={`text-2xl text-center ${styles.heading} ${paper.text}`}>
                     {verseData.reference}
                   </h2>
                   <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
@@ -451,9 +477,9 @@ const App = () => {
                       <h3 className={`text-xl ${theme.text} capitalize ${styles.heading}`}>
                         {section.title}
                       </h3>
-                      <div className={`flex-1 h-px ${theme.lightBg}`}></div>
+                      <div className={`flex-1 h-px ${bgOption === 'charcoal' ? 'bg-white/10' : 'bg-black/5'}`}></div>
                     </div>
-                    <div className={`flex flex-wrap ${showUnderlines ? 'gap-x-4 gap-y-6' : 'gap-x-1.5 gap-y-4'} text-2xl md:text-3xl font-medium text-slate-800 ${styles.passage}`}>
+                    <div className={`flex flex-wrap ${showUnderlines ? 'gap-x-4 gap-y-6' : 'gap-x-1.5 gap-y-4'} text-2xl md:text-3xl font-medium ${paper.text} ${styles.passage}`}>
                       {section.words.map((word) => (
                         <Word 
                           key={word.id}
