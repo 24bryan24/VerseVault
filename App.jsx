@@ -326,8 +326,8 @@ const App = () => {
         </div>
 
         {/* Sticky Memory Toolbar */}
-        <div className="sticky top-4 z-50 flex items-center justify-between bg-neutral-50/80 backdrop-blur-md py-2 px-1 rounded-2xl font-sans">
-          <div className="flex bg-white rounded-xl shadow-lg border border-slate-200 p-1">
+        <div className="sticky top-4 z-50 flex flex-col md:flex-row items-center gap-3 md:justify-between bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20">
+          <div className="flex bg-white rounded-xl shadow-lg border border-slate-200 p-1 w-full md:w-auto justify-between md:justify-start overflow-x-auto">
             <button
               onClick={() => { setVisibilityMode('full'); resetWpm(); }}
               className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
@@ -358,10 +358,10 @@ const App = () => {
             </button>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end">
             <button
               onClick={cycleFont}
-              className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
             >
               <CaseSensitive size={16} />
               {fontOption}
@@ -369,7 +369,7 @@ const App = () => {
 
             <button
               onClick={() => setShowUnderlines(!showUnderlines)}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl shadow-lg text-xs font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
                 showUnderlines ? 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50' : 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200'
               }`}
             >
