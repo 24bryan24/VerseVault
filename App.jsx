@@ -248,10 +248,9 @@ const App = () => {
 
   const handleWordClick = (wordGlobalIdx) => {
     if (visibilityMode === 'full') return;
-    // Surgical Edit: Allow clicking to jump the WPM playhead and start/resume playback
+    // Surgical Edit: Allow clicking to jump the WPM playhead while maintaining the current pause/playing state
     if (visibilityMode === 'wpm') {
       setCurrentWpmIndex(wordGlobalIdx);
-      setIsWpmPlaying(true);
       return;
     }
     setRevealedLetters(prev => ({
