@@ -71,6 +71,7 @@ const LibraryItem = memo(({ passage, onSelect, isFavorite, theme, API_TOKEN }) =
 
   const hoverBorderClass = theme.border ? theme.border.replace('border-', 'hover:border-') : 'hover:border-blue-500';
   const hoverShadowClass = theme.shadow ? theme.shadow.replace('shadow-', 'hover:shadow-') : 'hover:shadow-blue-50';
+  const hoverTextClass = theme.text ? theme.text.replace('text-', 'group-hover:text-') : 'group-hover:text-blue-600';
 
   return (
     <div 
@@ -81,7 +82,7 @@ const LibraryItem = memo(({ passage, onSelect, isFavorite, theme, API_TOKEN }) =
       <div className={`group flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl hover:shadow-lg transition-all text-left ${hoverBorderClass} ${hoverShadowClass}`}>
         <button 
           onClick={() => onSelect(passage)}
-          className="flex-1 font-bold text-sm text-slate-700 group-hover:text-blue-600 transition-colors text-left"
+          className={`flex-1 font-bold text-sm text-slate-700 ${hoverTextClass} transition-colors text-left`}
         >
           {passage}
         </button>
@@ -184,6 +185,7 @@ const App = () => {
   const [themeIdx, setThemeIdx] = useState(0);
   const [appBgIdx, setAppBgIdx] = useState(0);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [showFirstLetters, setShowFirstLetters] = useState(false);
 
   // Library State
   const [recentPassages, setRecentPassages] = useState([]);
@@ -442,6 +444,47 @@ const App = () => {
     return structure;
   }, [favoritePassages, recentPassages]);
 
+  // Dynamic visible count calculation
+  const visibleVerseCount = useMemo(() => {
+    let count = 0;
+    Object.entries(libraryGroups).forEach(([testament, books]) => {
+      const isOT = testament === 'Old Testament';
+      const showAll = isOT ? showAllOT : showAllNT;
+      const bookEntries = Object.entries(books);
+      const visibleBooks = showAll ? bookEntries : bookEntries.slice(0, 6);
+
+      visibleBooks.forEach(([book, passages]) => {
+        const hasMultiple = passages.length > 1;
+        const isExpanded = expandedBooks.has(book);
+        if (!hasMultiple || isExpanded) {
+          count += passages.length;
+        }
+      });
+    });
+    return count;
+  }, [libraryGroups, showAllOT, showAllNT, expandedBooks]);
+
+  // Bunched letters logic - Preserving casing, punctuation, quotes, dashes, hyphens
+  const firstLetterTape = useMemo(() => {
+    if (!verseData?.allWords) return '';
+    return verseData.allWords
+      .map(w => {
+        const text = w.text;
+        // Find the index of the first alphanumeric character
+        const firstAlphaMatch = text.match(/[a-zA-Z0-9]/);
+        if (!firstAlphaMatch) return text; // Return whole thing if no alpha (e.g. "—")
+        
+        const firstAlphaIdx = text.indexOf(firstAlphaMatch[0]);
+        // Keep everything leading up to and including the first alphanumeric character
+        const part1 = text.substring(0, firstAlphaIdx + 1);
+        // Keep trailing punctuation (everything that isn't alphanumeric after that first letter)
+        const part2 = text.substring(firstAlphaIdx + 1).replace(/[a-zA-Z0-9]/g, '');
+        
+        return part1 + part2;
+      })
+      .join('');
+  }, [verseData]);
+
   return (
     <div className={`min-h-screen transition-all duration-700 p-4 md:p-10 font-sans ${appBg.container}`}>
       <style>{`
@@ -471,10 +514,18 @@ const App = () => {
         
         {/* Header - Dynamic visibility based on Environment */}
         <div className="mb-8 flex justify-between items-end font-sans">
-          <div>
+          <div className="flex items-center gap-3">
             <h1 className={`text-4xl font-black tracking-tighter uppercase transition-all duration-300 ${appBg.text}`}>
               VERSE <span className={`${theme.text}`}>VAULT</span>
             </h1>
+            {/* Secret "Hidden" Button */}
+            <button 
+              onClick={() => setShowFirstLetters(!showFirstLetters)}
+              className="p-1 opacity-[0.03] hover:opacity-20 transition-opacity active:scale-95"
+              title="Toggle recall helper"
+            >
+              <Type size={12} strokeWidth={3} />
+            </button>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             <button 
@@ -512,6 +563,21 @@ const App = () => {
           </div>
         </div>
 
+        {/* Secret First-Letter Tape View */}
+        {showFirstLetters && verseData && (
+          <div className="mb-6 animate-in slide-in-from-left-4 fade-in duration-500">
+            <div className="bg-black/10 backdrop-blur-sm rounded-2xl p-4 border border-white/5 relative overflow-hidden">
+              <div className={`absolute top-0 left-0 w-1 h-full ${theme.bg}`}></div>
+              <div className="flex flex-col gap-1 pl-3">
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">Recall String (Bunched)</span>
+                <p className="font-mono text-sm sm:text-lg break-all tracking-widest text-white/60 leading-none select-all">
+                  {firstLetterTape}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Library Dashboard */}
         {isLibraryOpen && (
           <div className="mb-8 bg-white/90 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden animate-in zoom-in-95 fade-in duration-300 origin-top">
@@ -548,17 +614,25 @@ const App = () => {
                             const isExpanded = expandedBooks.has(book);
                             
                             return (
-                              <div key={book} className="space-y-2">
+                              <div key={book} className="space-y-3">
                                 {hasMultiple ? (
                                   <button 
                                     onClick={() => toggleBookExpansion(book)}
-                                    className={`w-full flex items-center justify-between text-[10px] font-black uppercase tracking-tighter pl-1 py-1 ${theme.text} opacity-70 hover:opacity-100 transition-opacity`}
+                                    className={`w-full flex items-center justify-between py-1 group transition-all`}
                                   >
-                                    <span>{book} ({passages.length})</span>
-                                    <ChevronDown size={12} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                    <span className={`text-base font-black uppercase tracking-tight ${theme.text} opacity-90 group-hover:opacity-100`}>{book}</span>
+                                    <div className="flex items-center gap-3">
+                                      <div className={`text-sm font-black transition-all ${theme.text} opacity-60 group-hover:opacity-100`}>
+                                        {passages.length}
+                                      </div>
+                                      <ChevronDown size={14} className={`transition-transform text-slate-400 ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </div>
                                   </button>
                                 ) : (
-                                  <h4 className={`text-[10px] font-black uppercase tracking-tighter pl-1 ${theme.text} opacity-70`}>{book}</h4>
+                                  <div className="flex items-center justify-between">
+                                    <h4 className={`text-base font-black uppercase tracking-tight ${theme.text} opacity-90`}>{book}</h4>
+                                    <div className={`w-2 h-2 rounded-full ${theme.bg} opacity-20`}></div>
+                                  </div>
                                 )}
                                 
                                 {(!hasMultiple || isExpanded) && (
@@ -595,7 +669,7 @@ const App = () => {
             </div>
             <div className="bg-slate-50 p-4 px-8 border-t border-slate-100 flex justify-between items-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Showing {Array.from(new Set([...favoritePassages, ...recentPassages])).length} stored verses
+                {visibleVerseCount} Verses
               </span>
               <button 
                 onClick={() => { setRecentPassages([]); setFavoritePassages([]); setExpandedBooks(new Set()); }}
@@ -787,7 +861,7 @@ const App = () => {
             <div className="animate-in fade-in zoom-in-95 duration-500">
               <header className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans relative`}>
                 <div className="relative group flex items-center gap-4">
-                  <h2 className={`text-2xl text-center ${styles.heading} ${paper.text}`}>
+                  <h2 className={`text-2xl text-center ${styles.heading} ${paper.text} hover:${theme.text} transition-colors duration-300 cursor-default`}>
                     {verseData.reference}
                   </h2>
                   <button 
