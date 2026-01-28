@@ -467,23 +467,32 @@ const App = () => {
   // Bunched letters logic - Preserving casing, punctuation, quotes, dashes, hyphens
   const firstLetterTape = useMemo(() => {
     if (!verseData?.allWords) return '';
+    // Corresponds to visibility mode: 1L = 1 letter, 2L = 2 letters, etc.
+    const limit = (visibilityMode === 'full' || visibilityMode === 'wpm') ? 999 : parseInt(visibilityMode);
+    // Add 1 small space between words for 'full', '2', '3'
+    const joinChar = (visibilityMode === 'full' || visibilityMode === '2' || visibilityMode === '3') ? ' ' : '';
+    
     return verseData.allWords
       .map(w => {
         const text = w.text;
-        // Find the index of the first alphanumeric character
-        const firstAlphaMatch = text.match(/[a-zA-Z0-9]/);
-        if (!firstAlphaMatch) return text; // Return whole thing if no alpha (e.g. "—")
+        let alphaFound = 0;
+        let constructed = "";
         
-        const firstAlphaIdx = text.indexOf(firstAlphaMatch[0]);
-        // Keep everything leading up to and including the first alphanumeric character
-        const part1 = text.substring(0, firstAlphaIdx + 1);
-        // Keep trailing punctuation (everything that isn't alphanumeric after that first letter)
-        const part2 = text.substring(firstAlphaIdx + 1).replace(/[a-zA-Z0-9]/g, '');
-        
-        return part1 + part2;
+        for (let char of text) {
+          const isAlpha = /[a-zA-Z0-9]/.test(char);
+          if (isAlpha) {
+            if (alphaFound < limit) {
+              constructed += char;
+              alphaFound++;
+            }
+          } else {
+            constructed += char;
+          }
+        }
+        return constructed;
       })
-      .join('');
-  }, [verseData]);
+      .join(joinChar);
+  }, [verseData, visibilityMode]);
 
   return (
     <div className={`min-h-screen transition-all duration-700 p-4 md:p-10 font-sans ${appBg.container}`}>
@@ -518,14 +527,6 @@ const App = () => {
             <h1 className={`text-4xl font-black tracking-tighter uppercase transition-all duration-300 ${appBg.text}`}>
               VERSE <span className={`${theme.text}`}>VAULT</span>
             </h1>
-            {/* Secret "Hidden" Button */}
-            <button 
-              onClick={() => setShowFirstLetters(!showFirstLetters)}
-              className="p-1 opacity-[0.03] hover:opacity-20 transition-opacity active:scale-95"
-              title="Toggle recall helper"
-            >
-              <Type size={12} strokeWidth={3} />
-            </button>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             <button 
@@ -562,21 +563,6 @@ const App = () => {
             </div>
           </div>
         </div>
-
-        {/* Secret First-Letter Tape View */}
-        {showFirstLetters && verseData && (
-          <div className="mb-6 animate-in slide-in-from-left-4 fade-in duration-500">
-            <div className="bg-black/10 backdrop-blur-sm rounded-2xl p-4 border border-white/5 relative overflow-hidden">
-              <div className={`absolute top-0 left-0 w-1 h-full ${theme.bg}`}></div>
-              <div className="flex flex-col gap-1 pl-3">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">Recall String (Bunched)</span>
-                <p className="font-mono text-sm sm:text-lg break-all tracking-widest text-white/60 leading-none select-all">
-                  {firstLetterTape}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Library Dashboard */}
         {isLibraryOpen && (
@@ -770,7 +756,7 @@ const App = () => {
         </div>
 
         {/* Sticky Memory Toolbar */}
-        <div className="sticky top-4 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300 mb-8">
+        <div className="sticky top-0 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300 mb-8">
           <div className="flex flex-col md:flex-row items-center gap-3 md:justify-between w-full">
             <div className="flex bg-white rounded-xl shadow-lg border border-slate-200 p-1 w-full md:w-auto justify-between md:justify-start overflow-x-auto">
               <button
@@ -821,13 +807,13 @@ const App = () => {
               </button>
 
               <button
-                onClick={() => setShowUnderlines(!showUnderlines)}
+                onClick={() => setShowFirstLetters(!showFirstLetters)}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
-                  showUnderlines ? 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50' : 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200'
+                  showFirstLetters ? `${theme.bg} border-transparent text-white ${theme.shadow}` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
                 }`}
               >
-                {showUnderlines ? <AlignLeft size={14} /> : <Grid3X3 size={14} />}
-                {showUnderlines ? 'No Lines' : 'Lines'}
+                <Type size={14} />
+                {showFirstLetters ? 'Bunched' : 'Normal'}
               </button>
             </div>
           </div>
@@ -875,30 +861,38 @@ const App = () => {
               </header>
               
               <div className="space-y-20">
-                {verseData.sections.map((section, sIdx) => (
-                  <div key={sIdx} className="animate-in fade-in duration-700">
-                    <div className="flex items-center gap-4 mb-8">
-                      <div className={`w-1 h-8 ${theme.bg} rounded-full`}></div>
-                      <h3 className={`text-xl ${theme.text} capitalize ${styles.heading}`}>
-                        {section.title}
-                      </h3>
-                      <div className={`flex-1 h-px ${bgOption === 'charcoal' ? 'bg-white/10' : 'bg-black/5'}`}></div>
-                    </div>
-                    <div className={`flex flex-wrap ${showUnderlines ? 'gap-x-4 gap-y-6' : 'gap-x-1.5 gap-y-4'} text-2xl md:text-3xl font-medium ${paper.text} ${styles.passage}`}>
-                      {section.words.map((word) => (
-                        <Word 
-                          key={word.id}
-                          word={word}
-                          visibilityMode={visibilityMode}
-                          revealedLetters={revealedLetters}
-                          currentWpmIndex={currentWpmIndex}
-                          showUnderlines={showUnderlines}
-                          onClick={handleWordClick}
-                        />
-                      ))}
+                {showFirstLetters ? (
+                  <div className="animate-in fade-in duration-500">
+                    <div className={`break-all tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 select-all ${styles.passage}`}>
+                      {firstLetterTape}
                     </div>
                   </div>
-                ))}
+                ) : (
+                  verseData.sections.map((section, sIdx) => (
+                    <div key={sIdx} className="animate-in fade-in duration-700">
+                      <div className="flex items-center gap-4 mb-8">
+                        <div className={`w-1 h-8 ${theme.bg} rounded-full`}></div>
+                        <h3 className={`text-xl ${theme.text} capitalize ${styles.heading}`}>
+                          {section.title}
+                        </h3>
+                        <div className={`flex-1 h-px ${bgOption === 'charcoal' ? 'bg-white/10' : 'bg-black/5'}`}></div>
+                      </div>
+                      <div className={`flex flex-wrap gap-x-4 gap-y-6 text-2xl md:text-3xl font-medium ${paper.text} ${styles.passage}`}>
+                        {section.words.map((word) => (
+                          <Word 
+                            key={word.id}
+                            word={word}
+                            visibilityMode={visibilityMode}
+                            revealedLetters={revealedLetters}
+                            currentWpmIndex={currentWpmIndex}
+                            showUnderlines={true}
+                            onClick={handleWordClick}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           ) : (
