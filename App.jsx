@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark } from 'lucide-react';
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/clerk-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -616,6 +617,23 @@ const App = () => {
             >
               <Palette size={18} className="group-hover:rotate-12 transition-transform" />
             </button>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button
+                  className={`p-2.5 backdrop-blur-md border rounded-full shadow-sm transition-all active:scale-90 group ${
+                    appBgIdx === 0 ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-white/10 border-white/10 text-white hover:bg-white/20'
+                  }`}
+                  title="Sign in"
+                >
+                  <LogIn size={18} className="group-hover:scale-110 transition-transform" />
+                </button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <div className="flex items-center [&_.cl-avatarBox]:h-9 [&_.cl-avatarBox]:w-9">
+                <UserButton afterSignOutUrl="/" />
+              </div>
+            </SignedIn>
             <div className={`hidden sm:block text-[10px] font-bold tracking-widest uppercase border-b-2 pb-0.5 transition-colors duration-300 ${appBg.muted} ${appBg.border}`}>
               ESV API v3
             </div>
