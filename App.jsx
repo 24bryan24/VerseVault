@@ -767,7 +767,7 @@ const App = () => {
               >
                 <Eye size={16} />
               </button>
-              {['1', '2', '3'].map((id) => (
+              {['3', '2', '1'].map((id) => (
                 <button
                   key={id}
                   onClick={() => { setVisibilityMode(id); resetWpm(); }}
