@@ -186,6 +186,7 @@ const App = () => {
   const [appBgIdx, setAppBgIdx] = useState(0);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [showFirstLetters, setShowFirstLetters] = useState(false);
+  const [bunchedReveal, setBunchedReveal] = useState({}); // wordId -> extra letters revealed (Bunched + 1L/2L/3L)
 
   // Library State
   const [recentPassages, setRecentPassages] = useState([]);
@@ -246,6 +247,7 @@ const App = () => {
     setLoading(true);
     setError(null);
     setRevealedLetters({});
+    setBunchedReveal({});
     resetWpm();
     setIsLibraryOpen(false);
 
@@ -464,6 +466,23 @@ const App = () => {
     return count;
   }, [libraryGroups, showAllOT, showAllNT, expandedBooks]);
 
+  // Split allWords into sentences (words ending with . ! ?)
+  const sentences = useMemo(() => {
+    if (!verseData?.allWords?.length) return [];
+    const list = [];
+    let current = [];
+    for (const word of verseData.allWords) {
+      current.push(word);
+      const lastChar = word.text.slice(-1);
+      if (['.', '!', '?'].includes(lastChar)) {
+        list.push([...current]);
+        current = [];
+      }
+    }
+    if (current.length) list.push(current);
+    return list;
+  }, [verseData?.allWords]);
+
   // Bunched letters logic - Preserving casing, punctuation, quotes, dashes, hyphens
   const firstLetterTape = useMemo(() => {
     if (!verseData?.allWords) return '';
@@ -493,6 +512,45 @@ const App = () => {
       })
       .join(joinChar);
   }, [verseData, visibilityMode]);
+
+  // Build display string for a list of words with base limit + bunchedReveal (for click-to-reveal sentences)
+  const getBunchedSentenceDisplay = (words, baseLimit, revealMap) => {
+    const joinChar = ' ';
+    return words
+      .map(w => {
+        let alphaFound = 0;
+        const limit = baseLimit + (revealMap[w.id] || 0);
+        let constructed = "";
+        for (const char of w.text) {
+          const isAlpha = /[a-zA-Z0-9]/.test(char);
+          if (isAlpha) {
+            if (alphaFound < limit) {
+              constructed += char;
+              alphaFound++;
+            }
+          } else {
+            constructed += char;
+          }
+        }
+        return constructed;
+      })
+      .join(joinChar);
+  };
+
+  const handleBunchedSentenceClick = (sentenceIndex) => {
+    const sentenceWords = sentences[sentenceIndex];
+    if (!sentenceWords?.length) return;
+    const baseLimit = (visibilityMode === 'full' || visibilityMode === 'wpm') ? 999 : parseInt(visibilityMode);
+    const countAlphanumeric = (word) => word.text.split('').filter(c => /[a-zA-Z0-9]/.test(c)).length;
+    for (const w of sentenceWords) {
+      const basePlusReveal = baseLimit + (bunchedReveal[w.id] || 0);
+      const totalAlpha = countAlphanumeric(w);
+      if (basePlusReveal < totalAlpha) {
+        setBunchedReveal(prev => ({ ...prev, [w.id]: (prev[w.id] || 0) + 1 }));
+        return;
+      }
+    }
+  };
 
   return (
     <div className={`min-h-screen transition-all duration-700 p-4 md:p-10 font-sans ${appBg.container}`}>
@@ -807,7 +865,7 @@ const App = () => {
               </button>
 
               <button
-                onClick={() => setShowFirstLetters(!showFirstLetters)}
+                onClick={() => { const next = !showFirstLetters; if (!next) setBunchedReveal({}); setShowFirstLetters(next); }}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
                   showFirstLetters ? `${theme.bg} border-transparent text-white ${theme.shadow}` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
                 }`}
@@ -863,9 +921,31 @@ const App = () => {
               <div className="space-y-20">
                 {showFirstLetters ? (
                   <div className="animate-in fade-in duration-500">
-                    <div className={`break-all tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 select-all ${styles.passage}`}>
-                      {firstLetterTape}
-                    </div>
+                    {['1', '2', '3'].includes(visibilityMode) && sentences.length > 0 ? (
+                      <div className={`break-words tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 ${styles.passage}`}>
+                        {sentences.map((sentenceWords, idx) => {
+                          const baseLimit = parseInt(visibilityMode);
+                          const display = getBunchedSentenceDisplay(sentenceWords, baseLimit, bunchedReveal);
+                          return (
+                            <span
+                              key={idx}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => handleBunchedSentenceClick(idx)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBunchedSentenceClick(idx); } }}
+                              className="cursor-pointer select-none inline hover:opacity-100 opacity-90 active:opacity-100 transition-opacity rounded px-0.5 -mx-0.5 touch-manipulation"
+                              style={{ WebkitTapHighlightColor: 'transparent' }}
+                            >
+                              {display}{idx < sentences.length - 1 ? ' ' : ''}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className={`break-all tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 select-all ${styles.passage}`}>
+                        {firstLetterTape}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   verseData.sections.map((section, sIdx) => (
