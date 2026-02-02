@@ -177,7 +177,7 @@ const App = () => {
 
   // Search/Selection State
   const [searchMode, setSearchMode] = useState('text'); 
-  const [manualQuery, setManualQuery] = useState('John 3:16');
+  const [manualQuery, setManualQuery] = useState('');
   
   // Selector State
   const [selBook, setSelBook] = useState('John');
@@ -210,6 +210,7 @@ const App = () => {
   const userId = user?.id ?? null;
   const userDataLoadedRef = useRef(false);
   const skipNextSyncRef = useRef(false);
+  const searchInputRef = useRef(null);
 
   // Load recent/favorites from Firestore when user signs in; clear when signed out
   useEffect(() => {
@@ -484,6 +485,16 @@ const App = () => {
 
   const styles = getCanvasStyles();
   const paper = getPaperStyles();
+
+  // Reference search: switch to number keyboard after book name (1st space if book doesn't start with digit, 2nd space if it does)
+  const searchIsNumberPhase = useMemo(() => {
+    const q = manualQuery;
+    const spaceCount = (q.match(/\s/g) || []).length;
+    const first = q.trimStart()[0];
+    if (!first) return false;
+    if (/\d/.test(first)) return spaceCount >= 2;
+    return spaceCount >= 1;
+  }, [manualQuery]);
 
   // Dashboard Grouping logic with Book Delineation
   const libraryGroups = useMemo(() => {
@@ -816,16 +827,30 @@ const App = () => {
               
               <div className="flex gap-2">
                 {searchMode === 'text' ? (
-                  <div className="relative w-full">
-                    <input 
-                      type="text"
-                      value={manualQuery}
-                      onChange={(e) => setManualQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && fetchPassage()}
-                      className={`w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 pl-11 outline-none transition-all font-medium ${theme.focus} focus:bg-white`}
-                      placeholder="e.g. Galatians 1-3"
-                    />
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                  <div className="relative w-full flex items-stretch">
+                    <div className="relative flex-1 min-w-0">
+                      <input 
+                        ref={searchInputRef}
+                        type="text"
+                        value={manualQuery}
+                        onChange={(e) => setManualQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && fetchPassage()}
+                        inputMode={searchIsNumberPhase ? 'numeric' : 'text'}
+                        className={`w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 pl-11 outline-none transition-all font-medium ${theme.focus} focus:bg-white ${searchIsNumberPhase ? 'pr-12 md:pr-4' : ''}`}
+                        placeholder="John 3:16"
+                      />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" size={18} />
+                    </div>
+                    {searchIsNumberPhase ? (
+                      <button
+                        type="button"
+                        onClick={() => { setManualQuery(prev => prev + ':'); searchInputRef.current?.focus(); }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg bg-slate-200/80 hover:bg-slate-300 text-slate-600 font-bold text-sm shrink-0 md:hidden"
+                        title="Insert colon"
+                      >
+                        :
+                      </button>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="flex gap-2 w-full">
