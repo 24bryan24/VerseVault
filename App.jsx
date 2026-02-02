@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, memo } from 'react';
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/clerk-react';
+import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from '@clerk/clerk-react';
+import { getUserPassages, setUserPassages } from './firebase';
 import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
@@ -195,6 +196,39 @@ const App = () => {
   const [expandedBooks, setExpandedBooks] = useState(new Set());
   const [showAllOT, setShowAllOT] = useState(false);
   const [showAllNT, setShowAllNT] = useState(false);
+
+  const { user } = useUser();
+  const userId = user?.id ?? null;
+  const userDataLoadedRef = useRef(false);
+  const skipNextSyncRef = useRef(false);
+
+  // Load recent/favorites from Firestore when user signs in; clear when signed out
+  useEffect(() => {
+    if (userId) {
+      userDataLoadedRef.current = false;
+      getUserPassages(userId).then(({ recentPassages: recent, favoritePassages: fav }) => {
+        setRecentPassages(Array.isArray(recent) ? recent : []);
+        setFavoritePassages(Array.isArray(fav) ? fav : []);
+        userDataLoadedRef.current = true;
+        skipNextSyncRef.current = true; // Don't write back immediately after load
+      });
+    } else {
+      setRecentPassages([]);
+      setFavoritePassages([]);
+      userDataLoadedRef.current = false;
+      skipNextSyncRef.current = false;
+    }
+  }, [userId]);
+
+  // Sync recent/favorites to Firestore when they change (only after initial load; skip first run after load)
+  useEffect(() => {
+    if (!userId || !userDataLoadedRef.current) return;
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
+    setUserPassages(userId, { recentPassages, favoritePassages });
+  }, [userId, recentPassages, favoritePassages]);
 
   // App Background Themes
   const APP_BGS = [
