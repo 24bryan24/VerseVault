@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from '@clerk/clerk-react';
 import { getUserPassages, setUserPassages } from './firebase';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2 } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -38,7 +38,7 @@ const getTestament = (reference) => {
 };
 
 // Library Item Component with Preview Logic
-const LibraryItem = memo(({ passage, onSelect, isFavorite, theme, API_TOKEN }) => {
+const LibraryItem = memo(({ passage, onSelect, onRemove, isFavorite, theme, API_TOKEN }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [previewText, setPreviewText] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -84,11 +84,20 @@ const LibraryItem = memo(({ passage, onSelect, isFavorite, theme, API_TOKEN }) =
       <div className={`group flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl hover:shadow-lg transition-all text-left ${hoverBorderClass} ${hoverShadowClass}`}>
         <button 
           onClick={() => onSelect(passage)}
-          className={`flex-1 font-bold text-sm text-slate-700 ${hoverTextClass} transition-colors text-left`}
+          className={`flex-1 font-bold text-sm text-slate-700 ${hoverTextClass} transition-colors text-left min-w-0 truncate pr-2`}
         >
           {passage}
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onRemove && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onRemove(passage); }}
+              className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-500 transition-colors"
+              title="Remove from library"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
           {isFavorite && <Star size={12} fill="#f43f5e" className="text-rose-500" />}
           <button 
             onClick={handleToggle}
@@ -377,6 +386,19 @@ const App = () => {
       }
       return [verseData.reference, ...prev];
     });
+  };
+
+  const removeFromFavorites = (passage) => {
+    setFavoritePassages(prev => prev.filter(p => p !== passage));
+  };
+
+  const removeFromRecents = (passage) => {
+    setRecentPassages(prev => prev.filter(p => p !== passage));
+  };
+
+  const removeFromLibrary = (passage) => {
+    setFavoritePassages(prev => prev.filter(p => p !== passage));
+    setRecentPassages(prev => prev.filter(p => p !== passage));
   };
 
   const toggleBookExpansion = (book) => {
@@ -738,6 +760,7 @@ const App = () => {
                                         key={p}
                                         passage={p}
                                         onSelect={fetchPassage}
+                                        onRemove={removeFromLibrary}
                                         isFavorite={favoritePassages.includes(p)}
                                         theme={theme}
                                         API_TOKEN={API_TOKEN}
@@ -835,13 +858,24 @@ const App = () => {
                 Favorites
               </div>
               {favoritePassages.map(p => (
-                <button 
+                <div 
                   key={p} 
-                  onClick={() => fetchPassage(p)}
-                  className={`px-4 py-1.5 bg-white/80 backdrop-blur-sm border border-rose-100 rounded-full text-xs font-bold text-slate-600 hover:border-rose-300 hover:text-rose-600 transition-all shrink-0 whitespace-nowrap shadow-sm snap-start`}
+                  className="flex items-center gap-1 pr-1 py-0.5 bg-white/80 backdrop-blur-sm border border-rose-100 rounded-full text-xs font-bold text-slate-600 hover:border-rose-300 shadow-sm shrink-0 snap-start group/chip"
                 >
-                  {p}
-                </button>
+                  <button 
+                    onClick={() => fetchPassage(p)}
+                    className="pl-4 py-1.5 hover:text-rose-600 transition-colors whitespace-nowrap text-left min-w-0 truncate max-w-[180px] sm:max-w-none"
+                  >
+                    {p}
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); removeFromFavorites(p); }}
+                    className="p-1 rounded-full hover:bg-rose-200 text-slate-400 hover:text-rose-600 transition-colors shrink-0"
+                    title="Remove from favorites"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -853,13 +887,24 @@ const App = () => {
                 Recent
               </div>
               {recentPassages.map(p => (
-                <button 
+                <div 
                   key={p} 
-                  onClick={() => fetchPassage(p)}
-                  className={`px-4 py-1.5 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-full text-xs font-bold text-slate-500 hover:border-slate-400 hover:text-slate-800 transition-all shrink-0 whitespace-nowrap shadow-sm snap-start`}
+                  className="flex items-center gap-1 pr-1 py-0.5 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-full text-xs font-bold text-slate-500 shadow-sm shrink-0 snap-start group/chip"
                 >
-                  {p}
-                </button>
+                  <button 
+                    onClick={() => fetchPassage(p)}
+                    className="pl-4 py-1.5 hover:border-slate-400 hover:text-slate-800 transition-colors whitespace-nowrap text-left min-w-0 truncate max-w-[180px] sm:max-w-none"
+                  >
+                    {p}
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); removeFromRecents(p); }}
+                    className="p-1 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                    title="Remove from recent"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
               ))}
             </div>
           )}
