@@ -303,7 +303,7 @@ const App = () => {
         if (typeof savedAppBgIdx === 'number' && savedAppBgIdx >= 0 && savedAppBgIdx < 6) setAppBgIdx(savedAppBgIdx);
         if (typeof savedFontOption === 'string') setFontOption(savedFontOption);
         if (typeof savedBgOption === 'string') setBgOption(savedBgOption);
-        if (typeof savedLastPassage === 'string') setManualQuery(savedLastPassage);
+        // Keep search bar empty on refresh so placeholder shows; last passage still loads below
         if (typeof savedVisibilityMode === 'string') setVisibilityMode(savedVisibilityMode);
         if (typeof savedShowFirstLetters === 'boolean') setShowFirstLetters(savedShowFirstLetters);
         userDataLoadedRef.current = true;
@@ -612,6 +612,15 @@ const App = () => {
     if (/\d/.test(first)) return spaceCount >= 2;
     return spaceCount >= 1;
   }, [manualQuery]);
+
+  // After colon has been used and there's at least one digit to the right, show dash instead of colon (e.g. for "John 3:16-17")
+  const searchShowDashButton = useMemo(() => {
+    if (!searchIsNumberPhase) return false;
+    const q = manualQuery;
+    const lastColon = q.lastIndexOf(':');
+    if (lastColon < 0) return false;
+    return /\d/.test(q.slice(lastColon + 1));
+  }, [manualQuery, searchIsNumberPhase]);
 
   // Dashboard Grouping logic with Book Delineation
   const libraryGroups = useMemo(() => {
@@ -961,11 +970,11 @@ const App = () => {
                     {searchIsNumberPhase ? (
                       <button
                         type="button"
-                        onClick={() => { setManualQuery(prev => prev + ':'); searchInputRef.current?.focus(); }}
+                        onClick={() => { setManualQuery(prev => prev + (searchShowDashButton ? '-' : ':')); searchInputRef.current?.focus(); }}
                         className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg bg-slate-200/80 hover:bg-slate-300 text-slate-600 font-bold text-sm shrink-0 md:hidden"
-                        title="Insert colon"
+                        title={searchShowDashButton ? 'Insert dash (verse range)' : 'Insert colon'}
                       >
-                        :
+                        {searchShowDashButton ? '−' : ':'}
                       </button>
                     ) : null}
                   </div>
