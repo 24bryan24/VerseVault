@@ -282,15 +282,33 @@ const App = () => {
   const skipNextSyncRef = useRef(false);
   const searchInputRef = useRef(null);
 
-  // Load recent/favorites from Firestore when user signs in; clear when signed out
+  // Load recent/favorites and all preferences from Firestore when user signs in; clear when signed out
   useEffect(() => {
     if (userId) {
       userDataLoadedRef.current = false;
-      getUserPassages(userId).then(({ recentPassages: recent, favoritePassages: fav }) => {
+      getUserPassages(userId).then(({
+        recentPassages: recent,
+        favoritePassages: fav,
+        themeIdx: savedThemeIdx,
+        appBgIdx: savedAppBgIdx,
+        fontOption: savedFontOption,
+        bgOption: savedBgOption,
+        lastPassage: savedLastPassage,
+        visibilityMode: savedVisibilityMode,
+        showFirstLetters: savedShowFirstLetters,
+      }) => {
         setRecentPassages(Array.isArray(recent) ? recent : []);
         setFavoritePassages(Array.isArray(fav) ? fav : []);
+        if (typeof savedThemeIdx === 'number' && savedThemeIdx >= 0 && savedThemeIdx < 5) setThemeIdx(savedThemeIdx);
+        if (typeof savedAppBgIdx === 'number' && savedAppBgIdx >= 0 && savedAppBgIdx < 6) setAppBgIdx(savedAppBgIdx);
+        if (typeof savedFontOption === 'string') setFontOption(savedFontOption);
+        if (typeof savedBgOption === 'string') setBgOption(savedBgOption);
+        if (typeof savedLastPassage === 'string') setManualQuery(savedLastPassage);
+        if (typeof savedVisibilityMode === 'string') setVisibilityMode(savedVisibilityMode);
+        if (typeof savedShowFirstLetters === 'boolean') setShowFirstLetters(savedShowFirstLetters);
         userDataLoadedRef.current = true;
         skipNextSyncRef.current = true; // Don't write back immediately after load
+        if (savedLastPassage && savedLastPassage.trim()) fetchPassage(savedLastPassage);
       });
     } else {
       setRecentPassages([]);
@@ -300,15 +318,25 @@ const App = () => {
     }
   }, [userId]);
 
-  // Sync recent/favorites to Firestore when they change (only after initial load; skip first run after load)
+  // Sync recent/favorites and all preferences to Firestore when they change (only after initial load; skip first run after load)
   useEffect(() => {
     if (!userId || !userDataLoadedRef.current) return;
     if (skipNextSyncRef.current) {
       skipNextSyncRef.current = false;
       return;
     }
-    setUserPassages(userId, { recentPassages, favoritePassages });
-  }, [userId, recentPassages, favoritePassages]);
+    setUserPassages(userId, {
+      recentPassages,
+      favoritePassages,
+      themeIdx,
+      appBgIdx,
+      fontOption,
+      bgOption,
+      lastPassage: verseData?.reference ?? '',
+      visibilityMode,
+      showFirstLetters,
+    });
+  }, [userId, recentPassages, favoritePassages, themeIdx, appBgIdx, fontOption, bgOption, verseData?.reference, visibilityMode, showFirstLetters]);
 
   // App Background Themes
   const APP_BGS = [

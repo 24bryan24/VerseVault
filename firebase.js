@@ -33,17 +33,35 @@ export function getDb() {
 
 const USERS_COLLECTION = 'users';
 
+const VALID_FONT_OPTIONS = ['classic', 'modern', 'mono', 'elegant', 'bold'];
+const VALID_BG_OPTIONS = ['blank', 'papyrus', 'notepad', 'ivory', 'charcoal'];
+const VALID_VISIBILITY_MODES = ['full', '1', '2', '3', 'wpm'];
+
 export async function getUserPassages(userId) {
   const firestore = getDb();
-  if (!firestore) return { recentPassages: [], favoritePassages: [] };
+  if (!firestore) return { recentPassages: [], favoritePassages: [], themeIdx: 0, appBgIdx: 0, fontOption: 'modern', bgOption: 'blank', lastPassage: '', visibilityMode: 'full', showFirstLetters: false };
   try {
     const userRef = doc(firestore, USERS_COLLECTION, userId);
     const snap = await getDoc(userRef);
     if (snap.exists()) {
       const data = snap.data();
+      const themeIdx = typeof data.themeIdx === 'number' ? data.themeIdx : 0;
+      const appBgIdx = typeof data.appBgIdx === 'number' ? data.appBgIdx : 0;
+      const fontOption = typeof data.fontOption === 'string' && VALID_FONT_OPTIONS.includes(data.fontOption) ? data.fontOption : 'modern';
+      const bgOption = typeof data.bgOption === 'string' && VALID_BG_OPTIONS.includes(data.bgOption) ? data.bgOption : 'blank';
+      const lastPassage = typeof data.lastPassage === 'string' ? data.lastPassage : '';
+      const visibilityMode = typeof data.visibilityMode === 'string' && VALID_VISIBILITY_MODES.includes(data.visibilityMode) ? data.visibilityMode : 'full';
+      const showFirstLetters = typeof data.showFirstLetters === 'boolean' ? data.showFirstLetters : false;
       return {
         recentPassages: Array.isArray(data.recentPassages) ? data.recentPassages : [],
         favoritePassages: Array.isArray(data.favoritePassages) ? data.favoritePassages : [],
+        themeIdx,
+        appBgIdx,
+        fontOption,
+        bgOption,
+        lastPassage,
+        visibilityMode,
+        showFirstLetters,
       };
     }
   } catch (e) {
@@ -51,18 +69,26 @@ export async function getUserPassages(userId) {
       console.warn('VerseVault Firestore load failed:', e.code || e.message, e.message);
     }
   }
-  return { recentPassages: [], favoritePassages: [] };
+  return { recentPassages: [], favoritePassages: [], themeIdx: 0, appBgIdx: 0, fontOption: 'modern', bgOption: 'blank', lastPassage: '', visibilityMode: 'full', showFirstLetters: false };
 }
 
-export async function setUserPassages(userId, { recentPassages, favoritePassages }) {
+export async function setUserPassages(userId, { recentPassages, favoritePassages, themeIdx, appBgIdx, fontOption, bgOption, lastPassage, visibilityMode, showFirstLetters }) {
   const firestore = getDb();
   if (!firestore) return;
   try {
     const userRef = doc(firestore, USERS_COLLECTION, userId);
-    await setDoc(userRef, {
+    const payload = {
       recentPassages: recentPassages || [],
       favoritePassages: favoritePassages || [],
-    });
+    };
+    if (typeof themeIdx === 'number') payload.themeIdx = themeIdx;
+    if (typeof appBgIdx === 'number') payload.appBgIdx = appBgIdx;
+    if (typeof fontOption === 'string') payload.fontOption = fontOption;
+    if (typeof bgOption === 'string') payload.bgOption = bgOption;
+    if (typeof lastPassage === 'string') payload.lastPassage = lastPassage;
+    if (typeof visibilityMode === 'string') payload.visibilityMode = visibilityMode;
+    if (typeof showFirstLetters === 'boolean') payload.showFirstLetters = showFirstLetters;
+    await setDoc(userRef, payload);
   } catch (e) {
     if (import.meta.env.DEV) {
       console.warn('VerseVault Firestore save failed:', e.code || e.message, e.message);
