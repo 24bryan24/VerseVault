@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from '@clerk/clerk-react';
 import { getUserPassages, setUserPassages } from './firebase';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2 } from 'lucide-react';
+import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2, MessageCircle, ExternalLink, Paperclip } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -268,6 +268,12 @@ const App = () => {
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [showFirstLetters, setShowFirstLetters] = useState(false);
   const [bunchedReveal, setBunchedReveal] = useState({}); // wordId -> extra letters revealed (Bunched + 1L/2L/3L)
+  const [suggestionModalOpen, setSuggestionModalOpen] = useState(false);
+  const [suggestionStatus, setSuggestionStatus] = useState('idle'); // idle | sending | success | error
+  const [suggestionName, setSuggestionName] = useState('');
+  const [suggestionMessage, setSuggestionMessage] = useState('');
+  const [suggestionFile, setSuggestionFile] = useState(null);
+  const suggestionFileInputRef = useRef(null);
 
   // Library State
   const [recentPassages, setRecentPassages] = useState([]);
@@ -517,6 +523,39 @@ const App = () => {
   const removeFromLibrary = (passage) => {
     setFavoritePassages(prev => prev.filter(p => p !== passage));
     setRecentPassages(prev => prev.filter(p => p !== passage));
+  };
+
+  const handleSuggestionSubmit = async (e) => {
+    e.preventDefault();
+    const formId = import.meta.env.VITE_FORMSPREE_FORM_ID;
+    if (!formId) {
+      setSuggestionStatus('error');
+      return;
+    }
+    setSuggestionStatus('sending');
+    const formData = new FormData();
+    formData.append('name', suggestionName.trim() || 'Anonymous');
+    formData.append('message', suggestionMessage.trim());
+    formData.append('_subject', 'VerseVault: Suggestion or Bug Report');
+    if (suggestionFile) formData.append('file', suggestionFile);
+    try {
+      const res = await fetch(`https://formspree.io/f/${formId}`, {
+        method: 'POST',
+        body: formData,
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) {
+        setSuggestionStatus('success');
+        setSuggestionName('');
+        setSuggestionMessage('');
+        setSuggestionFile(null);
+        if (suggestionFileInputRef.current) suggestionFileInputRef.current.value = '';
+      } else {
+        setSuggestionStatus('error');
+      }
+    } catch {
+      setSuggestionStatus('error');
+    }
   };
 
   const toggleBookExpansion = (book) => {
@@ -1240,9 +1279,62 @@ const App = () => {
           </div>
         )}
 
-        <footer className="mt-12 text-center pb-20 font-sans">
+        <footer className="mt-12 text-center pb-20 font-sans space-y-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+            <a href="https://scripturetype.web.app" target="_blank" rel="noopener noreferrer" className={`text-sm font-bold uppercase tracking-wider transition-colors hover:underline inline-flex items-center gap-1.5 ${appBg.muted} hover:opacity-100`}>
+              VerseType <ExternalLink size={12} />
+            </a>
+            <a href="https://verseaxis.web.app" target="_blank" rel="noopener noreferrer" className={`text-sm font-bold uppercase tracking-wider transition-colors hover:underline inline-flex items-center gap-1.5 ${appBg.muted} hover:opacity-100`}>
+              VerseAxis <ExternalLink size={12} />
+            </a>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setSuggestionModalOpen(true); setSuggestionStatus('idle'); }}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-colors ${appBgIdx === 0 ? 'border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700' : 'border-white/20 text-white/80 hover:bg-white/10 hover:text-white'}`}
+          >
+            <MessageCircle size={14} />
+            Have a suggestion?
+          </button>
           <p className={`text-[10px] font-bold uppercase tracking-widest transition-colors duration-300 ${appBg.muted}`}>ESV® Bible • Crossway Publishing • {new Date().getFullYear()}</p>
         </footer>
+
+        {/* Suggestion / feedback modal */}
+        {suggestionModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSuggestionModalOpen(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-lg font-black uppercase tracking-tight text-slate-800">Suggestion or bug report</h3>
+                <button type="button" onClick={() => setSuggestionModalOpen(false)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleSuggestionSubmit} className="p-6 space-y-4">
+                <div>
+                  <label htmlFor="suggestion-name" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Your name (optional)</label>
+                  <input id="suggestion-name" type="text" value={suggestionName} onChange={e => setSuggestionName(e.target.value)} placeholder="Anonymous" className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-100 focus:border-blue-500 outline-none text-slate-800" />
+                </div>
+                <div>
+                  <label htmlFor="suggestion-message" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Details <span className="text-rose-500">*</span></label>
+                  <textarea id="suggestion-message" required value={suggestionMessage} onChange={e => setSuggestionMessage(e.target.value)} placeholder="Describe your idea or the issue..." rows={4} className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-100 focus:border-blue-500 outline-none resize-y text-slate-800" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Attach a screenshot (optional)</label>
+                  <input ref={suggestionFileInputRef} type="file" accept="image/*" onChange={e => setSuggestionFile(e.target.files?.[0] ?? null)} className="w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-100 file:font-bold file:text-slate-700" />
+                  {suggestionFile && <p className="mt-1.5 text-xs text-slate-500 flex items-center gap-1"><Paperclip size={12} /> {suggestionFile.name}</p>}
+                </div>
+                {suggestionStatus === 'success' && <p className="text-sm font-bold text-emerald-600">Thanks! Your message was sent.</p>}
+                {suggestionStatus === 'error' && <p className="text-sm font-bold text-rose-600">Something went wrong. Check that Formspree is set up or try again.</p>}
+                <div className="flex gap-2 pt-2">
+                  <button type="button" onClick={() => setSuggestionModalOpen(false)} className="flex-1 py-2.5 rounded-xl border-2 border-slate-200 font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                  <button type="submit" disabled={suggestionStatus === 'sending'} className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-black disabled:opacity-50">
+                    {suggestionStatus === 'sending' ? 'Sending…' : 'Send'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
