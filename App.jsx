@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from '@clerk/clerk-react';
 import { getUserPassages, setUserPassages } from './firebase';
-import { Search, List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2, MessageCircle, ExternalLink, Paperclip } from 'lucide-react';
+import { List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2, Lightbulb, Paperclip } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -411,7 +411,22 @@ const App = () => {
   };
 
   const fetchPassage = async (overrideQuery = null) => {
-    let finalQuery = overrideQuery || (searchMode === 'text' ? manualQuery : `${selBook} ${selChapter}:${selVerse}`);
+    let finalQuery = overrideQuery;
+    if (finalQuery == null) {
+      if (searchMode === 'text') {
+        finalQuery = manualQuery;
+      } else {
+        const bookIdx = BIBLE_DATA.findIndex(b => b.book === selBook);
+        const chIdx = parseInt(selChapter, 10) - 1;
+        const maxVerse = (bookIdx >= 0 && VERSE_COUNTS_BY_BOOK[bookIdx]) ? (VERSE_COUNTS_BY_BOOK[bookIdx][chIdx] ?? 31) : 31;
+        const v = parseInt(selVerse, 10);
+        if (v === maxVerse) {
+          finalQuery = `${selBook} ${selChapter}`;
+        } else {
+          finalQuery = `${selBook} ${selChapter}:${selVerse}`;
+        }
+      }
+    }
     setLoading(true);
     setError(null);
     setRevealedLetters({});
@@ -820,6 +835,16 @@ const App = () => {
             </h1>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => { setSuggestionModalOpen(true); setSuggestionStatus('idle'); }}
+              className={`p-2.5 backdrop-blur-md border rounded-full shadow-sm transition-all active:scale-90 group ${
+                appBgIdx === 0 ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-white/10 border-white/10 text-white hover:bg-white/20'
+              }`}
+              title="Suggestions, feedback & bug reports"
+            >
+              <Lightbulb size={18} className="group-hover:scale-110 transition-transform" />
+            </button>
             <button 
               onClick={() => setIsLibraryOpen(!isLibraryOpen)}
               className={`p-2.5 backdrop-blur-md border rounded-full shadow-sm transition-all active:scale-90 group ${
@@ -979,20 +1004,9 @@ const App = () => {
         {/* Control Panel */}
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 mb-8 font-sans relative z-10">
           <div className="flex flex-col md:flex-row gap-6 items-end">
-            <div className="flex-1 w-full">
-              <div className="flex justify-end items-center mb-3">
-                <button 
-                  onClick={() => setSearchMode(searchMode === 'text' ? 'select' : 'text')}
-                  className={`text-xs ${theme.text} hover:underline flex items-center gap-1.5 font-bold uppercase tracking-wider`}
-                >
-                  {searchMode === 'text' ? <BookOpen size={14}/> : <Keyboard size={14}/>}
-                  {searchMode === 'text' ? 'Browse Library' : 'Direct Entry'}
-                </button>
-              </div>
-              
-              <div className="flex gap-2">
+            <div className="flex-1 w-full flex gap-2">
                 {searchMode === 'text' ? (
-                  <div className="relative w-full flex items-stretch">
+                  <div className="relative w-full flex items-stretch flex-1 min-w-0">
                     <div className="relative flex-1 min-w-0">
                       <input 
                         ref={searchInputRef}
@@ -1004,7 +1018,14 @@ const App = () => {
                         className={`w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 pl-11 outline-none transition-all font-medium ${theme.focus} focus:bg-white ${searchIsNumberPhase ? 'pr-12 md:pr-4' : ''}`}
                         placeholder="John 3:16"
                       />
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" size={18} />
+                      <button
+                        type="button"
+                        onClick={() => setSearchMode('select')}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:bg-slate-200/60 hover:text-slate-600 transition-colors"
+                        title="Browse Library"
+                      >
+                        <ChevronDown size={18} />
+                      </button>
                     </div>
                     {searchIsNumberPhase ? (
                       <button
@@ -1018,13 +1039,36 @@ const App = () => {
                     ) : null}
                   </div>
                 ) : (
-                  <div className="flex gap-2 w-full">
+                  <div className="flex gap-2 w-full flex-1 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setSearchMode('text')}
+                      className="shrink-0 p-2.5 rounded-xl border-2 border-slate-100 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                      title="Direct Entry"
+                    >
+                      <Keyboard size={18} />
+                    </button>
                     <select value={selBook} onChange={(e) => setSelBook(e.target.value)} className={`flex-[2] bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none ${theme.focus}`}>
                       {BIBLE_DATA.map(b => <option key={b.book} value={b.book}>{b.book}</option>)}
                     </select>
-                    <select value={selChapter} onChange={(e) => setSelChapter(e.target.value)} className={`flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none ${theme.focus}`}>
-                      {chaptersList.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <div className={`flex-1 flex items-center bg-slate-50 border-2 border-slate-100 rounded-xl overflow-hidden ${theme.focus}`}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation();
+                          const bookIdx = BIBLE_DATA.findIndex(b => b.book === selBook);
+                          const chIdx = parseInt(selChapter, 10) - 1;
+                          const maxVerse = (bookIdx >= 0 && VERSE_COUNTS_BY_BOOK[bookIdx]) ? (VERSE_COUNTS_BY_BOOK[bookIdx][chIdx] ?? 31) : 31;
+                          setSelVerse(String(maxVerse));
+                        }}
+                        className="shrink-0 p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                        title="Set to last verse (fetch whole chapter)"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                      <select value={selChapter} onChange={(e) => setSelChapter(e.target.value)} className="flex-1 min-w-0 bg-transparent px-3 py-3 font-medium outline-none border-0">
+                        {chaptersList.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
                     <select value={selVerse} onChange={(e) => setSelVerse(e.target.value)} className={`flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none ${theme.focus}`}>
                       {versesList.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -1034,7 +1078,6 @@ const App = () => {
                 <button onClick={() => fetchPassage()} disabled={loading} className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50">
                   {loading ? <RefreshCw className="animate-spin" size={20} /> : <ArrowRight size={24} />}
                 </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1279,23 +1322,16 @@ const App = () => {
           </div>
         )}
 
-        <footer className="mt-12 text-center pb-20 font-sans space-y-4">
+        <footer className="mt-12 text-center pb-20 font-sans space-y-8">
+          <p className={`text-xs font-medium ${appBg.muted}`}>Loving this application? Try out our other sites!</p>
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-            <a href="https://scripturetype.web.app" target="_blank" rel="noopener noreferrer" className={`text-sm font-bold uppercase tracking-wider transition-colors hover:underline inline-flex items-center gap-1.5 ${appBg.muted} hover:opacity-100`}>
-              VerseType <ExternalLink size={12} />
+            <a href="https://scripturetype.web.app" target="_blank" rel="noopener noreferrer" className={`text-sm font-bold uppercase tracking-wider transition-colors hover:underline ${appBg.muted} hover:opacity-100`}>
+              VerseType
             </a>
-            <a href="https://verseaxis.web.app" target="_blank" rel="noopener noreferrer" className={`text-sm font-bold uppercase tracking-wider transition-colors hover:underline inline-flex items-center gap-1.5 ${appBg.muted} hover:opacity-100`}>
-              VerseAxis <ExternalLink size={12} />
+            <a href="https://verseaxis.web.app" target="_blank" rel="noopener noreferrer" className={`text-sm font-bold uppercase tracking-wider transition-colors hover:underline ${appBg.muted} hover:opacity-100`}>
+              VerseAxis
             </a>
           </div>
-          <button
-            type="button"
-            onClick={() => { setSuggestionModalOpen(true); setSuggestionStatus('idle'); }}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-colors ${appBgIdx === 0 ? 'border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700' : 'border-white/20 text-white/80 hover:bg-white/10 hover:text-white'}`}
-          >
-            <MessageCircle size={14} />
-            Have a suggestion?
-          </button>
           <p className={`text-[10px] font-bold uppercase tracking-widest transition-colors duration-300 ${appBg.muted}`}>ESV® Bible • Crossway Publishing • {new Date().getFullYear()}</p>
         </footer>
 
