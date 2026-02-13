@@ -1394,29 +1394,29 @@ const App = () => {
                 WPM
               </button>
             </div>
-            <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end">
+            <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end min-w-0">
               <button
                 onClick={cycleFont}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
+                className="flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 px-2 md:px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-[8px] md:text-[10px] font-bold uppercase tracking-wide md:tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap min-w-0"
               >
-                <CaseSensitive size={14} />
-                {fontOption}
+                <CaseSensitive size={14} className="shrink-0" />
+                <span className="truncate">{fontOption}</span>
               </button>
               <button
                 onClick={cycleBg}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
+                className="flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 px-2 md:px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-[8px] md:text-[10px] font-bold uppercase tracking-wide md:tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap min-w-0"
               >
-                <Paintbrush size={14} />
-                {bgOption}
+                <Paintbrush size={14} className="shrink-0" />
+                <span className="truncate">{bgOption}</span>
               </button>
               <button
                 onClick={() => { const next = !showFirstLetters; if (!next) setBunchedReveal({}); setShowFirstLetters(next); }}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-xl shadow-lg text-[8px] md:text-[10px] font-bold uppercase tracking-wide md:tracking-widest border-2 transition-all whitespace-nowrap min-w-0 ${
                   showFirstLetters ? `${theme.bg} border-transparent text-white ${theme.shadow}` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
                 }`}
               >
-                <Type size={14} />
-                {showFirstLetters ? 'Bunched' : 'Normal'}
+                <Type size={14} className="shrink-0" />
+                <span className="truncate">{showFirstLetters ? 'Bunched' : 'Normal'}</span>
               </button>
             </div>
           </div>
