@@ -276,6 +276,11 @@ const App = () => {
   const suggestionFileInputRef = useRef(null);
   const toolbarSentinelRef = useRef(null);
   const [isToolbarStuck, setIsToolbarStuck] = useState(false);
+  const [toolbarHidden, setToolbarHidden] = useState(false);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false);
+  const toolbarHideTimerRef = useRef(null);
+  const scrollEndTimerRef = useRef(null);
+  const HIDE_TOOLBAR_AFTER_MS = 750;
 
   // Library State
   const [recentPassages, setRecentPassages] = useState([]);
@@ -409,6 +414,58 @@ const App = () => {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, []);
+
+  // Mobile viewport detection
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // When toolbar unsticks, show it again and clear hide timer
+  useEffect(() => {
+    if (!isToolbarStuck) {
+      setToolbarHidden(false);
+      if (toolbarHideTimerRef.current) {
+        clearTimeout(toolbarHideTimerRef.current);
+        toolbarHideTimerRef.current = null;
+      }
+      if (scrollEndTimerRef.current) {
+        clearTimeout(scrollEndTimerRef.current);
+        scrollEndTimerRef.current = null;
+      }
+    }
+  }, [isToolbarStuck]);
+
+  // Hide sticky toolbar after delay when stuck on mobile; show again on scroll
+  useEffect(() => {
+    if (!isMobile || !isToolbarStuck) return;
+
+    const scheduleHide = () => {
+      if (toolbarHideTimerRef.current) clearTimeout(toolbarHideTimerRef.current);
+      toolbarHideTimerRef.current = setTimeout(() => setToolbarHidden(true), HIDE_TOOLBAR_AFTER_MS);
+    };
+
+    scheduleHide();
+
+    const onScroll = () => {
+      setToolbarHidden(false);
+      if (toolbarHideTimerRef.current) {
+        clearTimeout(toolbarHideTimerRef.current);
+        toolbarHideTimerRef.current = null;
+      }
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
+      scrollEndTimerRef.current = setTimeout(scheduleHide, HIDE_TOOLBAR_AFTER_MS);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (toolbarHideTimerRef.current) clearTimeout(toolbarHideTimerRef.current);
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
+    };
+  }, [isMobile, isToolbarStuck]);
 
   const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
     try {
@@ -1158,7 +1215,7 @@ const App = () => {
         <div ref={toolbarSentinelRef} className="h-px w-full" aria-hidden="true" />
 
         {/* Sticky Memory Toolbar */}
-        <div className={`sticky top-0 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300 mb-8 ${isToolbarStuck ? 'group stuck' : ''}`}>
+        <div className={`sticky top-0 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300 mb-8 ${isToolbarStuck ? 'group stuck' : ''} ${toolbarHidden && isToolbarStuck && isMobile ? '-translate-y-full pointer-events-none' : ''}`}>
           {/* When stuck on mobile: single row of icon-only buttons; otherwise two groups */}
           {isToolbarStuck ? (
             <div className="flex items-center flex-nowrap gap-1 justify-center overflow-x-auto no-scrollbar w-full max-md:py-0.5">
