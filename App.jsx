@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from '@clerk/clerk-react';
 import { getUserPassages, setUserPassages } from './firebase';
-import { List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2, Lightbulb, Paperclip } from 'lucide-react';
+import { List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2, Lightbulb, Paperclip, ListOrdered, FileText } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -268,6 +268,9 @@ const App = () => {
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [showFirstLetters, setShowFirstLetters] = useState(false);
   const [bunchedReveal, setBunchedReveal] = useState({}); // wordId -> extra letters revealed (Bunched + 1L/2L/3L)
+  const [showVerseNumbers, setShowVerseNumbers] = useState(false);
+  const [showPassageHeadings, setShowPassageHeadings] = useState(false);
+  const [showChapterHeadings, setShowChapterHeadings] = useState(false);
   const [suggestionModalOpen, setSuggestionModalOpen] = useState(false);
   const [suggestionStatus, setSuggestionStatus] = useState('idle'); // idle | sending | success | error
   const [suggestionName, setSuggestionName] = useState('');
@@ -280,7 +283,10 @@ const App = () => {
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false);
   const toolbarHideTimerRef = useRef(null);
   const scrollEndTimerRef = useRef(null);
+  const sidebarHideTimerRef = useRef(null);
+  const sidebarScrollEndTimerRef = useRef(null);
   const HIDE_TOOLBAR_AFTER_MS = 750;
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
   // Library State
   const [recentPassages, setRecentPassages] = useState([]);
@@ -467,6 +473,22 @@ const App = () => {
     };
   }, [isMobile, isToolbarStuck]);
 
+  // Mobile: show context sidebar on scroll, hide after delay when scroll stops
+  useEffect(() => {
+    if (!isMobile) return;
+    const HIDE_MS = 750;
+    const onScroll = () => {
+      setSidebarVisible(true);
+      if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current);
+      sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), HIDE_MS);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current);
+    };
+  }, [isMobile]);
+
   const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
     try {
       const res = await fetch(url, options);
@@ -532,26 +554,58 @@ const App = () => {
       let globalWordCounter = 0;
 
       for (const query of chaptersToFetch) {
-        const esvUrl = `https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(query)}&include-headings=false&include-footnotes=false&include-verse-numbers=false&include-short-copyright=false&include-passage-references=false`;
+        const esvUrl = `https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(query)}&include-headings=true&include-footnotes=false&include-verse-numbers=true&include-short-copyright=false&include-passage-references=false`;
         
         const data = await fetchWithRetry(esvUrl, {
           headers: { 'Authorization': `Token ${API_TOKEN}` }
         });
 
         if (data.passages?.[0]) {
-          const rawText = data.passages[0].trim().replace(/([-–—])/g, ' $1 '); 
-          const rawTokens = rawText.split(/\s+/);
-          const processedTokens = rawTokens.filter(t => t.length > 0);
+          const rawText = data.passages[0].trim();
+          const blocks = rawText.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+          let currentVerse = 1;
+          let currentPassageHeading = null;
+          const wordsInChapter = [];
 
-          const wordsInChapter = processedTokens.map((w) => {
-            const wordObj = {
-              id: globalWordCounter++,
-              text: w,
-              letters: w.split('')
-            };
-            allWords.push(wordObj);
-            return wordObj;
-          });
+          for (const block of blocks) {
+            let contentToParse = block;
+            if (block.includes('\n')) {
+              const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+              const firstLine = lines[0];
+              const looksLikeVerse = /^\[?\d+\]?\s/.test(firstLine) || /^\d+\s/.test(firstLine);
+              if (!looksLikeVerse && firstLine.length < 200 && !/^[\[\d\s\]]+$/.test(firstLine)) {
+                currentPassageHeading = firstLine;
+                contentToParse = lines.slice(1).join(' ');
+              }
+            } else {
+              const isHeadingOnly = !/^\[?\d+\]?\s/.test(block) && !/^\d+\s/.test(block) && block.length > 0 && block.length < 200 && !/^[\[\d\s\]]+$/.test(block);
+              if (isHeadingOnly) {
+                currentPassageHeading = block;
+                continue;
+              }
+            }
+            const blockNormalized = contentToParse.replace(/([-–—])/g, ' $1 ');
+            const rawTokens = blockNormalized.split(/\s+/);
+            const processedTokens = rawTokens.filter(t => t.length > 0);
+
+            for (const token of processedTokens) {
+              const verseNumMatch = token.match(/^\[?(\d+)\]?$/);
+              if (verseNumMatch) {
+                currentVerse = parseInt(verseNumMatch[1], 10);
+                continue;
+              }
+              const wordObj = {
+                id: globalWordCounter++,
+                text: token,
+                letters: token.split(''),
+                verseNum: currentVerse,
+                sectionIdx: sections.length,
+                passageHeading: currentPassageHeading
+              };
+              allWords.push(wordObj);
+              wordsInChapter.push(wordObj);
+            }
+          }
 
           sections.push({
             title: data.canonical,
@@ -1322,6 +1376,42 @@ const App = () => {
           </div>
           )}
 
+          {/* Context options: verse numbers, passage headings, chapter headings - desktop only */}
+          {verseData && (
+            <div className="hidden md:flex items-center justify-center gap-2 pt-2 border-t border-slate-200/50">
+              <button
+                onClick={() => setShowVerseNumbers(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border-2 shrink-0 ${
+                  showVerseNumbers ? `${theme.bg} text-white ${theme.shadow} border-transparent` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                }`}
+                title="Verse numbers"
+              >
+                <ListOrdered size={12} />
+                <span>Verses</span>
+              </button>
+              <button
+                onClick={() => setShowPassageHeadings(p => !p)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border-2 shrink-0 ${
+                  showPassageHeadings ? `${theme.bg} text-white ${theme.shadow} border-transparent` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                }`}
+                title="Passage headings (e.g. Jesus and the Woman Caught in Adultery)"
+              >
+                <FileText size={12} />
+                <span>Passage</span>
+              </button>
+              <button
+                onClick={() => setShowChapterHeadings(h => !h)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border-2 shrink-0 ${
+                  showChapterHeadings ? `${theme.bg} text-white ${theme.shadow} border-transparent` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                }`}
+                title="Chapter headings (e.g. John 3)"
+              >
+                <BookOpen size={12} />
+                <span>Chapter</span>
+              </button>
+            </div>
+          )}
+
           {/* WPM Reader HUD */}
           {visibilityMode === 'wpm' && (
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 py-3 border-t border-slate-200/50 animate-in slide-in-from-top-2">
@@ -1344,6 +1434,44 @@ const App = () => {
             </div>
           )}
         </div>
+
+        {/* Mobile: vertical context sidebar (verse numbers, chapter numbers, headings) - disappears after delay, reappears on scroll */}
+        {verseData && isMobile && (
+          <div
+            className={`fixed right-0 top-24 bottom-auto z-40 flex flex-col gap-2 py-3 pl-2 pr-2 bg-neutral-50/95 backdrop-blur-md border-l border-white/20 shadow-lg rounded-l-2xl transition-transform duration-300 ${
+              sidebarVisible ? 'translate-x-0' : 'translate-x-full'
+            }`}
+            style={{ width: '52px' }}
+          >
+            <button
+              onClick={() => { setShowVerseNumbers(v => !v); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
+              className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
+                showVerseNumbers ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
+              }`}
+              title="Verse numbers"
+            >
+              <ListOrdered size={18} />
+            </button>
+            <button
+              onClick={() => { setShowPassageHeadings(p => !p); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
+              className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
+                showPassageHeadings ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
+              }`}
+              title="Passage headings (e.g. Jesus and the Woman Caught in Adultery)"
+            >
+              <FileText size={18} />
+            </button>
+            <button
+              onClick={() => { setShowChapterHeadings(h => !h); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
+              className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
+                showChapterHeadings ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
+              }`}
+              title="Chapter headings (e.g. John 3)"
+            >
+              <BookOpen size={18} />
+            </button>
+          </div>
+        )}
 
         {/* Verse Canvas */}
         <div className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-hidden transition-all duration-500 ${styles.container}`}>
@@ -1369,11 +1497,29 @@ const App = () => {
                   <div className="animate-in fade-in duration-500">
                     {['1', '2', '3'].includes(visibilityMode) && sentences.length > 0 ? (
                       <div className={`break-words tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 ${styles.passage}`}>
-                        {sentences.map((sentenceWords, sentenceIdx) => (
-                          <React.Fragment key={sentenceIdx}>
-                            {sentenceWords.map((w, wordIdx) => (
+                        {verseData.allWords.map((w, i) => {
+                          const prev = verseData.allWords[i - 1];
+                          const isFirstInSection = prev == null || (prev.sectionIdx !== w.sectionIdx);
+                          const isFirstInVerse = prev == null || (prev.verseNum !== w.verseNum);
+                          const section = verseData.sections[w.sectionIdx];
+                          return (
+                            <React.Fragment key={w.id}>
+                              {isFirstInSection && showChapterHeadings && section && (
+                                <span className="block mt-6 mb-2">
+                                  <span className={`text-base ${theme.text} font-bold opacity-80 mr-2`}>{section.title}</span>
+                                </span>
+                              )}
+                              {showPassageHeadings && w.passageHeading && (prev == null || prev.passageHeading !== w.passageHeading) && (
+                                <span className="block mt-4 mb-1">
+                                  <span className={`text-sm italic ${paper.text} opacity-70`}>{w.passageHeading}</span>
+                                </span>
+                              )}
+                              {showVerseNumbers && isFirstInVerse && (
+                                <span className={`text-xs align-super ${paper.text} opacity-50 mr-0.5`} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                  {(w.verseNum ?? 1)}{' '}
+                                </span>
+                              )}
                               <span
-                                key={w.id}
                                 role="button"
                                 tabIndex={0}
                                 onClick={() => handleBunchedWordClick(w.id)}
@@ -1382,11 +1528,11 @@ const App = () => {
                                 style={{ WebkitTapHighlightColor: 'transparent' }}
                               >
                                 {getBunchedSentenceDisplay([w], parseInt(visibilityMode), bunchedReveal)}
-                                {(wordIdx < sentenceWords.length - 1 || sentenceIdx < sentences.length - 1) ? ' ' : ''}
                               </span>
-                            ))}
-                          </React.Fragment>
-                        ))}
+                              {' '}
+                            </React.Fragment>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className={`break-all tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 select-all ${styles.passage}`}>
@@ -1397,24 +1543,37 @@ const App = () => {
                 ) : (
                   verseData.sections.map((section, sIdx) => (
                     <div key={sIdx} className="animate-in fade-in duration-700">
-                      <div className="flex items-center gap-4 mb-8">
-                        <div className={`w-1 h-8 ${theme.bg} rounded-full`}></div>
-                        <h3 className={`text-xl ${theme.text} capitalize ${styles.heading}`}>
-                          {section.title}
-                        </h3>
-                        <div className={`flex-1 h-px ${bgOption === 'charcoal' ? 'bg-white/10' : 'bg-black/5'}`}></div>
-                      </div>
+                      {showChapterHeadings && (
+                        <div className="flex items-center gap-4 mb-8">
+                          <div className={`w-1 h-8 ${theme.bg} rounded-full`}></div>
+                          <h3 className={`text-xl ${theme.text} capitalize ${styles.heading}`}>
+                            {section.title}
+                          </h3>
+                          <div className={`flex-1 h-px ${bgOption === 'charcoal' ? 'bg-white/10' : 'bg-black/5'}`}></div>
+                        </div>
+                      )}
                       <div className={`flex flex-wrap gap-x-4 gap-y-6 text-2xl md:text-3xl font-medium ${paper.text} ${styles.passage}`}>
-                        {section.words.map((word) => (
-                          <Word 
-                            key={word.id}
-                            word={word}
-                            visibilityMode={visibilityMode}
-                            revealedLetters={revealedLetters}
-                            currentWpmIndex={currentWpmIndex}
-                            showUnderlines={true}
-                            onClick={handleWordClick}
-                          />
+                        {section.words.map((word, wIdx) => (
+                          <React.Fragment key={word.id}>
+                            {showPassageHeadings && word.passageHeading && (wIdx === 0 || section.words[wIdx - 1]?.passageHeading !== word.passageHeading) && (
+                              <span className="w-full text-base italic opacity-75 mb-2" style={{ flexBasis: '100%' }}>
+                                {word.passageHeading}
+                              </span>
+                            )}
+                            {showVerseNumbers && (wIdx === 0 || (section.words[wIdx - 1]?.verseNum !== word.verseNum)) && (
+                              <span className={`text-sm align-super ${paper.text} opacity-60 mr-0.5`} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                {(word.verseNum ?? 1)}
+                              </span>
+                            )}
+                            <Word 
+                              word={word}
+                              visibilityMode={visibilityMode}
+                              revealedLetters={revealedLetters}
+                              currentWpmIndex={currentWpmIndex}
+                              showUnderlines={true}
+                              onClick={handleWordClick}
+                            />
+                          </React.Fragment>
                         ))}
                       </div>
                     </div>
