@@ -278,6 +278,7 @@ const App = () => {
   const [suggestionFile, setSuggestionFile] = useState(null);
   const suggestionFileInputRef = useRef(null);
   const toolbarSentinelRef = useRef(null);
+  const toolbarStuckDebounceRef = useRef(null);
   const [isToolbarStuck, setIsToolbarStuck] = useState(false);
   const [toolbarHidden, setToolbarHidden] = useState(false);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false);
@@ -409,16 +410,29 @@ const App = () => {
     if (v > maxVerse || isNaN(v) || v < 1) setSelVerse(String(maxVerse));
   }, [selBook, selChapter, selVerse]);
 
-  // Detect when sticky toolbar has hit the top (for mobile compact layout)
+  // Detect when sticky toolbar has hit the top (debounce: quick to stick, slow to unstick to avoid flip-flop)
   useEffect(() => {
     const sentinel = toolbarSentinelRef.current;
     if (!sentinel) return;
+    const STICK_DEBOUNCE_MS = 80;
+    const UNSTICK_DEBOUNCE_MS = 200;
     const observer = new IntersectionObserver(
-      ([entry]) => setIsToolbarStuck(!entry.isIntersecting),
-      { threshold: 0, rootMargin: '-1px 0px 0px 0px' }
+      ([entry]) => {
+        const stuck = !entry.isIntersecting;
+        const delay = stuck ? STICK_DEBOUNCE_MS : UNSTICK_DEBOUNCE_MS;
+        if (toolbarStuckDebounceRef.current) clearTimeout(toolbarStuckDebounceRef.current);
+        toolbarStuckDebounceRef.current = setTimeout(() => {
+          setIsToolbarStuck(stuck);
+          toolbarStuckDebounceRef.current = null;
+        }, delay);
+      },
+      { threshold: 0, rootMargin: '-6px 0px 0px 0px' }
     );
     observer.observe(sentinel);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (toolbarStuckDebounceRef.current) clearTimeout(toolbarStuckDebounceRef.current);
+    };
   }, []);
 
   // Mobile viewport detection
