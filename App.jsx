@@ -274,6 +274,8 @@ const App = () => {
   const [suggestionMessage, setSuggestionMessage] = useState('');
   const [suggestionFile, setSuggestionFile] = useState(null);
   const suggestionFileInputRef = useRef(null);
+  const toolbarSentinelRef = useRef(null);
+  const [isToolbarStuck, setIsToolbarStuck] = useState(false);
 
   // Library State
   const [recentPassages, setRecentPassages] = useState([]);
@@ -395,6 +397,18 @@ const App = () => {
     const v = parseInt(selVerse, 10);
     if (v > maxVerse || isNaN(v) || v < 1) setSelVerse(String(maxVerse));
   }, [selBook, selChapter, selVerse]);
+
+  // Detect when sticky toolbar has hit the top (for mobile compact layout)
+  useEffect(() => {
+    const sentinel = toolbarSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsToolbarStuck(!entry.isIntersecting),
+      { threshold: 0, rootMargin: '-1px 0px 0px 0px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
 
   const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
     try {
@@ -785,18 +799,15 @@ const App = () => {
       .join(joinChar);
   };
 
-  const handleBunchedSentenceClick = (sentenceIndex) => {
-    const sentenceWords = sentences[sentenceIndex];
-    if (!sentenceWords?.length) return;
+  const handleBunchedWordClick = (wordId) => {
     const baseLimit = (visibilityMode === 'full' || visibilityMode === 'wpm') ? 999 : parseInt(visibilityMode);
-    const countAlphanumeric = (word) => word.text.split('').filter(c => /[a-zA-Z0-9]/.test(c)).length;
-    for (const w of sentenceWords) {
-      const basePlusReveal = baseLimit + (bunchedReveal[w.id] || 0);
-      const totalAlpha = countAlphanumeric(w);
-      if (basePlusReveal < totalAlpha) {
-        setBunchedReveal(prev => ({ ...prev, [w.id]: (prev[w.id] || 0) + 1 }));
-        return;
-      }
+    const word = verseData?.allWords?.find(w => w.id === wordId);
+    if (!word) return;
+    const countAlphanumeric = (w) => w.text.split('').filter(c => /[a-zA-Z0-9]/.test(c)).length;
+    const totalAlpha = countAlphanumeric(word);
+    const currentReveal = bunchedReveal[wordId] || 0;
+    if (baseLimit + currentReveal < totalAlpha) {
+      setBunchedReveal(prev => ({ ...prev, [wordId]: (prev[wordId] || 0) + 1 }));
     }
   };
 
@@ -1143,8 +1154,58 @@ const App = () => {
           )}
         </div>
 
+        {/* Sentinel for sticky toolbar (detect when toolbar hits top) */}
+        <div ref={toolbarSentinelRef} className="h-px w-full" aria-hidden="true" />
+
         {/* Sticky Memory Toolbar */}
-        <div className="sticky top-0 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300 mb-8">
+        <div className={`sticky top-0 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300 mb-8 ${isToolbarStuck ? 'group stuck' : ''}`}>
+          {/* When stuck on mobile: single row of icon-only buttons; otherwise two groups */}
+          {isToolbarStuck ? (
+            <div className="flex items-center flex-nowrap gap-1 justify-center overflow-x-auto no-scrollbar w-full max-md:py-0.5">
+              <button
+                onClick={() => { setVisibilityMode('full'); resetWpm(); }}
+                className={`p-2 rounded-lg text-xs font-bold transition-all shrink-0 min-w-[36px] flex items-center justify-center ${
+                  visibilityMode === 'full' ? `${theme.bg} text-white shadow-lg ${theme.shadow}` : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'
+                }`}
+              >
+                <Eye size={14} />
+              </button>
+              {['3', '2', '1'].map((id) => (
+                <button
+                  key={id}
+                  onClick={() => { setVisibilityMode(id); resetWpm(); }}
+                  className={`p-2 rounded-lg text-[10px] font-black transition-all shrink-0 min-w-[28px] flex items-center justify-center ${
+                    visibilityMode === id ? `${theme.bg} text-white shadow-lg ${theme.shadow}` : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'
+                  }`}
+                >
+                  {id}L
+                </button>
+              ))}
+              <button
+                onClick={() => { setVisibilityMode('wpm'); }}
+                className={`p-2 rounded-lg text-xs font-bold transition-all shrink-0 min-w-[36px] flex items-center justify-center ${
+                  visibilityMode === 'wpm' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'
+                }`}
+              >
+                <Timer size={14} />
+              </button>
+              <button onClick={cycleFont} className="p-2 rounded-lg shrink-0 min-w-[36px] flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all" title={fontOption}>
+                <CaseSensitive size={14} />
+              </button>
+              <button onClick={cycleBg} className="p-2 rounded-lg shrink-0 min-w-[36px] flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all" title={bgOption}>
+                <Paintbrush size={14} />
+              </button>
+              <button
+                onClick={() => { const next = !showFirstLetters; if (!next) setBunchedReveal({}); setShowFirstLetters(next); }}
+                className={`p-2 rounded-lg shrink-0 min-w-[36px] flex items-center justify-center border transition-all ${
+                  showFirstLetters ? `${theme.bg} border-transparent text-white ${theme.shadow}` : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'
+                }`}
+                title={showFirstLetters ? 'Bunched' : 'Normal'}
+              >
+                <Type size={14} />
+              </button>
+            </div>
+          ) : (
           <div className="flex flex-col md:flex-row items-center gap-3 md:justify-between w-full">
             <div className="flex bg-white rounded-xl shadow-lg border border-slate-200 p-1 w-full md:w-auto justify-between md:justify-start overflow-x-auto">
               <button
@@ -1176,7 +1237,6 @@ const App = () => {
                 WPM
               </button>
             </div>
-
             <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end">
               <button
                 onClick={cycleFont}
@@ -1185,7 +1245,6 @@ const App = () => {
                 <CaseSensitive size={14} />
                 {fontOption}
               </button>
-
               <button
                 onClick={cycleBg}
                 className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-slate-100 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all whitespace-nowrap"
@@ -1193,7 +1252,6 @@ const App = () => {
                 <Paintbrush size={14} />
                 {bgOption}
               </button>
-
               <button
                 onClick={() => { const next = !showFirstLetters; if (!next) setBunchedReveal({}); setShowFirstLetters(next); }}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl shadow-lg text-[10px] font-bold uppercase tracking-widest border-2 transition-all whitespace-nowrap ${
@@ -1205,6 +1263,7 @@ const App = () => {
               </button>
             </div>
           </div>
+          )}
 
           {/* WPM Reader HUD */}
           {visibilityMode === 'wpm' && (
@@ -1253,23 +1312,24 @@ const App = () => {
                   <div className="animate-in fade-in duration-500">
                     {['1', '2', '3'].includes(visibilityMode) && sentences.length > 0 ? (
                       <div className={`break-words tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 ${styles.passage}`}>
-                        {sentences.map((sentenceWords, idx) => {
-                          const baseLimit = parseInt(visibilityMode);
-                          const display = getBunchedSentenceDisplay(sentenceWords, baseLimit, bunchedReveal);
-                          return (
-                            <span
-                              key={idx}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => handleBunchedSentenceClick(idx)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBunchedSentenceClick(idx); } }}
-                              className="cursor-pointer select-none inline hover:opacity-100 opacity-90 active:opacity-100 transition-opacity rounded px-0.5 -mx-0.5 touch-manipulation"
-                              style={{ WebkitTapHighlightColor: 'transparent' }}
-                            >
-                              {display}{idx < sentences.length - 1 ? ' ' : ''}
-                            </span>
-                          );
-                        })}
+                        {sentences.map((sentenceWords, sentenceIdx) => (
+                          <React.Fragment key={sentenceIdx}>
+                            {sentenceWords.map((w, wordIdx) => (
+                              <span
+                                key={w.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => handleBunchedWordClick(w.id)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBunchedWordClick(w.id); } }}
+                                className="cursor-pointer select-none inline hover:opacity-100 opacity-90 active:opacity-100 transition-opacity rounded px-0.5 -mx-0.5 touch-manipulation"
+                                style={{ WebkitTapHighlightColor: 'transparent' }}
+                              >
+                                {getBunchedSentenceDisplay([w], parseInt(visibilityMode), bunchedReveal)}
+                                {(wordIdx < sentenceWords.length - 1 || sentenceIdx < sentences.length - 1) ? ' ' : ''}
+                              </span>
+                            ))}
+                          </React.Fragment>
+                        ))}
                       </div>
                     ) : (
                       <div className={`break-all tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 select-all ${styles.passage}`}>
