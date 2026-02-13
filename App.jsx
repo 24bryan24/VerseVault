@@ -1315,6 +1315,38 @@ const App = () => {
               >
                 <Type size={14} />
               </button>
+              {/* Desktop when stuck: same row, icon-only context buttons */}
+              {verseData && (
+                <>
+                  <button
+                    onClick={() => setShowChapterHeadings(h => !h)}
+                    className={`hidden md:flex p-2 rounded-lg shrink-0 min-w-[36px] items-center justify-center border-2 transition-all ${
+                      showChapterHeadings ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'
+                    }`}
+                    title="Chapter headings"
+                  >
+                    <BookOpen size={14} />
+                  </button>
+                  <button
+                    onClick={() => setShowPassageHeadings(p => !p)}
+                    className={`hidden md:flex p-2 rounded-lg shrink-0 min-w-[36px] items-center justify-center border-2 transition-all ${
+                      showPassageHeadings ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'
+                    }`}
+                    title="Passage headings"
+                  >
+                    <FileText size={14} />
+                  </button>
+                  <button
+                    onClick={() => setShowVerseNumbers(v => !v)}
+                    className={`hidden md:flex p-2 rounded-lg shrink-0 min-w-[36px] items-center justify-center border-2 transition-all ${
+                      showVerseNumbers ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'
+                    }`}
+                    title="Verse numbers"
+                  >
+                    <ListOrdered size={14} />
+                  </button>
+                </>
+              )}
             </div>
           ) : (
           <div className="flex flex-col md:flex-row items-center gap-3 md:justify-between w-full">
@@ -1376,18 +1408,18 @@ const App = () => {
           </div>
           )}
 
-          {/* Context options: verse numbers, passage headings, chapter headings - desktop only */}
+          {/* Context options: verse numbers, passage headings, chapter headings - desktop only, hidden when stuck (moved to same line) */}
           {verseData && (
-            <div className="hidden md:flex items-center justify-center gap-2 pt-2 border-t border-slate-200/50">
+            <div className="hidden md:flex group-[.stuck]:hidden items-center justify-center gap-2 pt-2 border-t border-slate-200/50">
               <button
-                onClick={() => setShowVerseNumbers(v => !v)}
+                onClick={() => setShowChapterHeadings(h => !h)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border-2 shrink-0 ${
-                  showVerseNumbers ? `${theme.bg} text-white ${theme.shadow} border-transparent` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                  showChapterHeadings ? `${theme.bg} text-white ${theme.shadow} border-transparent` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
                 }`}
-                title="Verse numbers"
+                title="Chapter headings (e.g. John 3)"
               >
-                <ListOrdered size={12} />
-                <span>Verses</span>
+                <BookOpen size={12} />
+                <span>Chapters</span>
               </button>
               <button
                 onClick={() => setShowPassageHeadings(p => !p)}
@@ -1397,17 +1429,17 @@ const App = () => {
                 title="Passage headings (e.g. Jesus and the Woman Caught in Adultery)"
               >
                 <FileText size={12} />
-                <span>Passage</span>
+                <span>Headings</span>
               </button>
               <button
-                onClick={() => setShowChapterHeadings(h => !h)}
+                onClick={() => setShowVerseNumbers(v => !v)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border-2 shrink-0 ${
-                  showChapterHeadings ? `${theme.bg} text-white ${theme.shadow} border-transparent` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                  showVerseNumbers ? `${theme.bg} text-white ${theme.shadow} border-transparent` : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
                 }`}
-                title="Chapter headings (e.g. John 3)"
+                title="Verse numbers"
               >
-                <BookOpen size={12} />
-                <span>Chapter</span>
+                <ListOrdered size={12} />
+                <span>Verses</span>
               </button>
             </div>
           )}
@@ -1436,7 +1468,7 @@ const App = () => {
         </div>
 
         {/* Mobile: vertical context sidebar (verse numbers, chapter numbers, headings) - disappears after delay, reappears on scroll */}
-        {verseData && isMobile && (
+        {verseData && isMobile && isToolbarStuck && (
           <div
             className={`fixed right-0 top-24 bottom-auto z-40 flex flex-col gap-2 py-3 pl-2 pr-2 bg-neutral-50/95 backdrop-blur-md border-l border-white/20 shadow-lg rounded-l-2xl transition-transform duration-300 ${
               sidebarVisible ? 'translate-x-0' : 'translate-x-full'
@@ -1444,13 +1476,13 @@ const App = () => {
             style={{ width: '52px' }}
           >
             <button
-              onClick={() => { setShowVerseNumbers(v => !v); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
+              onClick={() => { setShowChapterHeadings(h => !h); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
               className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
-                showVerseNumbers ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
+                showChapterHeadings ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
               }`}
-              title="Verse numbers"
+              title="Chapter headings (e.g. John 3)"
             >
-              <ListOrdered size={18} />
+              <BookOpen size={18} />
             </button>
             <button
               onClick={() => { setShowPassageHeadings(p => !p); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
@@ -1462,13 +1494,13 @@ const App = () => {
               <FileText size={18} />
             </button>
             <button
-              onClick={() => { setShowChapterHeadings(h => !h); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
+              onClick={() => { setShowVerseNumbers(v => !v); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
               className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
-                showChapterHeadings ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
+                showVerseNumbers ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
               }`}
-              title="Chapter headings (e.g. John 3)"
+              title="Verse numbers"
             >
-              <BookOpen size={18} />
+              <ListOrdered size={18} />
             </button>
           </div>
         )}
