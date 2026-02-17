@@ -1700,7 +1700,7 @@ const App = () => {
               <div className="space-y-20">
                 {showFirstLetters ? (
                   <div className="animate-in fade-in duration-500">
-                    {['1', '2', '3'].includes(visibilityMode) && sentences.length > 0 ? (
+                    {(['1', '2', '3', 'full'].includes(visibilityMode) || visibilityMode === 'wpm') && sentences.length > 0 ? (
                       <div className={`break-words tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 ${styles.passage}`}>
                         {verseData.allWords.map((w, i) => {
                           const prev = verseData.allWords[i - 1];
@@ -1733,7 +1733,7 @@ const App = () => {
                                 className="cursor-pointer select-none inline hover:opacity-100 opacity-90 active:opacity-100 transition-opacity rounded px-0.5 -mx-0.5 touch-manipulation"
                                 style={{ WebkitTapHighlightColor: 'transparent' }}
                               >
-                                {getBunchedSentenceDisplay([w], parseInt(visibilityMode), bunchedReveal)}
+                                {getBunchedSentenceDisplay([w], visibilityMode === 'full' || visibilityMode === 'wpm' ? 999 : parseInt(visibilityMode), bunchedReveal)}
                               </span>
                               {' '}
                             </React.Fragment>
