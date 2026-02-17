@@ -587,12 +587,26 @@ const App = () => {
               const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
               const firstLine = lines[0];
               const looksLikeVerse = /^\[?\d+\]?\s/.test(firstLine) || /^\d+\s/.test(firstLine);
-              if (!looksLikeVerse && firstLine.length < 200 && !/^[\[\d\s\]]+$/.test(firstLine)) {
+              const looksLikeHeading = !looksLikeVerse && 
+                firstLine.length > 0 && 
+                firstLine.length < 100 && 
+                !/^[\[\d\s\]]+$/.test(firstLine) &&
+                !/[.,:;!?]$/.test(firstLine.trim()) && // Doesn't end with sentence punctuation
+                !/["'"]/.test(firstLine) && // Doesn't contain quotes
+                !/^(And|Then|But|So|Now|When|After|Before|While|As|If|Because|For|The|A|An)\s/i.test(firstLine); // Doesn't start with common quote/sentence starters
+              if (looksLikeHeading) {
                 currentPassageHeading = firstLine;
                 contentToParse = lines.slice(1).join(' ');
               }
             } else {
-              const isHeadingOnly = !/^\[?\d+\]?\s/.test(block) && !/^\d+\s/.test(block) && block.length > 0 && block.length < 200 && !/^[\[\d\s\]]+$/.test(block);
+              const isHeadingOnly = !/^\[?\d+\]?\s/.test(block) && 
+                !/^\d+\s/.test(block) && 
+                block.length > 0 && 
+                block.length < 100 && 
+                !/^[\[\d\s\]]+$/.test(block) &&
+                !/[.,:;!?]$/.test(block.trim()) && // Doesn't end with sentence punctuation
+                !/["'"]/.test(block) && // Doesn't contain quotes
+                !/^(And|Then|But|So|Now|When|After|Before|While|As|If|Because|For|The|A|An)\s/i.test(block); // Doesn't start with common quote/sentence starters
               if (isHeadingOnly) {
                 currentPassageHeading = block;
                 continue;
