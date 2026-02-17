@@ -1495,16 +1495,25 @@ const App = () => {
           )}
         </div>
 
-        {/* Mobile: vertical context sidebar (verse numbers, chapter numbers, headings) - disappears after delay, reappears on scroll */}
-        {verseData && isMobile && isToolbarStuck && (
+        {/* Vertical context sidebar (verse numbers, chapter numbers, headings) - mobile: disappears after delay when stuck; desktop: always visible */}
+        {verseData && (
           <div
             className={`fixed right-0 top-24 bottom-auto z-40 flex flex-col gap-2 py-3 pl-2 pr-2 bg-neutral-50/95 backdrop-blur-md border-l border-white/20 shadow-lg rounded-l-2xl transition-transform duration-300 ${
-              sidebarVisible ? 'translate-x-0' : 'translate-x-full'
-            }`}
+              isMobile && isToolbarStuck 
+                ? (sidebarVisible ? 'translate-x-0' : 'translate-x-full')
+                : 'translate-x-0'
+            } ${isMobile && !isToolbarStuck ? 'hidden' : ''} md:flex`}
             style={{ width: '52px' }}
           >
             <button
-              onClick={() => { setShowChapterHeadings(h => !h); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
+              onClick={() => { 
+                setShowChapterHeadings(h => !h); 
+                if (isMobile) {
+                  setSidebarVisible(true); 
+                  if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); 
+                  sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750);
+                }
+              }}
               className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
                 showChapterHeadings ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
               }`}
@@ -1513,7 +1522,14 @@ const App = () => {
               <BookOpen size={18} />
             </button>
             <button
-              onClick={() => { setShowPassageHeadings(p => !p); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
+              onClick={() => { 
+                setShowPassageHeadings(p => !p); 
+                if (isMobile) {
+                  setSidebarVisible(true); 
+                  if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); 
+                  sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750);
+                }
+              }}
               className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
                 showPassageHeadings ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
               }`}
@@ -1522,7 +1538,14 @@ const App = () => {
               <FileText size={18} />
             </button>
             <button
-              onClick={() => { setShowVerseNumbers(v => !v); setSidebarVisible(true); if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750); }}
+              onClick={() => { 
+                setShowVerseNumbers(v => !v); 
+                if (isMobile) {
+                  setSidebarVisible(true); 
+                  if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current); 
+                  sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750);
+                }
+              }}
               className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
                 showVerseNumbers ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
               }`}
