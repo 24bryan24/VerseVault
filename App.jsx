@@ -211,6 +211,7 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
 
   return (
     <div 
+      data-word-id={word.id}
       onClick={() => onClick(word.id)}
       className={`cursor-pointer select-none transition-all group relative inline-flex items-baseline ${showUnderlines ? 'font-mono' : ''}`}
     >
@@ -288,6 +289,13 @@ const App = () => {
   const sidebarScrollEndTimerRef = useRef(null);
   const HIDE_TOOLBAR_AFTER_MS = 750;
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const verseCanvasRef = useRef(null);
+  const [scrollAnchorWordId, setScrollAnchorWordId] = useState(null);
+  const scrollAnchorObserverRef = useRef(null);
+  const isRestoringScrollRef = useRef(false);
+  const prevVisibilityModeRef = useRef(visibilityMode);
+  const prevShowFirstLettersRef = useRef(showFirstLetters);
+  const scrollPositionRef = useRef({ wordId: null, scrollPercent: null });
 
   // Library State
   const [recentPassages, setRecentPassages] = useState([]);
@@ -502,6 +510,120 @@ const App = () => {
       if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current);
     };
   }, [isMobile]);
+
+  // Track which word is at the top of the viewport for scroll position restoration
+  useEffect(() => {
+    if (!verseData?.allWords?.length) return;
+    const canvas = verseCanvasRef.current;
+    if (!canvas) return;
+
+    const updateScrollAnchor = () => {
+      if (isRestoringScrollRef.current) return;
+      const wordElements = canvas.querySelectorAll('[data-word-id]');
+      if (wordElements.length === 0) return;
+      
+      const viewportTop = window.scrollY + 200;
+      const canvasTop = canvas.getBoundingClientRect().top + window.scrollY;
+      const canvasHeight = canvas.scrollHeight || canvas.offsetHeight;
+      
+      for (const el of wordElements) {
+        const rect = el.getBoundingClientRect();
+        const elementTop = window.scrollY + rect.top;
+        if (elementTop >= viewportTop - 50 && elementTop <= viewportTop + 100) {
+          const wordId = parseInt(el.getAttribute('data-word-id'), 10);
+          if (!isNaN(wordId)) {
+            const scrollPercent = canvasHeight > 0 ? ((elementTop - canvasTop) / canvasHeight) * 100 : null;
+            setScrollAnchorWordId(wordId);
+            scrollPositionRef.current = { wordId, scrollPercent };
+            break;
+          }
+        }
+      }
+    };
+
+    const handleScroll = () => {
+      if (!isRestoringScrollRef.current) {
+        updateScrollAnchor();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    updateScrollAnchor();
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [verseData]);
+
+  // Restore scroll position when visibility mode or bunched/normal changes
+  useEffect(() => {
+    const modeChanged = prevVisibilityModeRef.current !== visibilityMode;
+    const viewChanged = prevShowFirstLettersRef.current !== showFirstLetters;
+    
+    if (!modeChanged && !viewChanged) {
+      prevVisibilityModeRef.current = visibilityMode;
+      prevShowFirstLettersRef.current = showFirstLetters;
+      return;
+    }
+    
+    prevVisibilityModeRef.current = visibilityMode;
+    prevShowFirstLettersRef.current = showFirstLetters;
+    
+    if (scrollAnchorWordId == null || !verseCanvasRef.current) return;
+    isRestoringScrollRef.current = true;
+    
+    const restoreScroll = (attempt = 0) => {
+      const canvas = verseCanvasRef.current;
+      if (!canvas) {
+        isRestoringScrollRef.current = false;
+        return;
+      }
+      
+      const wordElement = canvas.querySelector(`[data-word-id="${scrollAnchorWordId}"]`);
+      if (wordElement) {
+        const rect = wordElement.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0 && rect.top !== 0) {
+          const scrollY = window.scrollY + rect.top - 150;
+          window.scrollTo({ top: Math.max(0, scrollY), behavior: 'instant' });
+          setTimeout(() => {
+            isRestoringScrollRef.current = false;
+          }, 250);
+          return;
+        }
+      }
+      
+      // Fallback: try to restore by scroll percentage if word not found
+      if (scrollPositionRef.current.scrollPercent != null && attempt > 2) {
+        const canvasRect = canvas.getBoundingClientRect();
+        const canvasTop = canvasRect.top + window.scrollY;
+        const canvasHeight = canvas.scrollHeight || canvas.offsetHeight;
+        if (canvasHeight > 0) {
+          const targetScroll = canvasTop + (canvasHeight * scrollPositionRef.current.scrollPercent / 100) - 150;
+          window.scrollTo({ top: Math.max(0, targetScroll), behavior: 'instant' });
+          setTimeout(() => {
+            isRestoringScrollRef.current = false;
+          }, 250);
+          return;
+        }
+      }
+      
+      if (attempt < 8) {
+        setTimeout(() => restoreScroll(attempt + 1), 50);
+      } else {
+        isRestoringScrollRef.current = false;
+      }
+    };
+
+    const delay = showFirstLetters ? 350 : 180;
+    setTimeout(() => {
+      restoreScroll();
+    }, delay);
+  }, [visibilityMode, showFirstLetters, scrollAnchorWordId]);
+
+  // Reset scroll anchor when passage changes
+  useEffect(() => {
+    setScrollAnchorWordId(null);
+  }, [verseData?.reference]);
 
   const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
     try {
@@ -1557,7 +1679,7 @@ const App = () => {
         )}
 
         {/* Verse Canvas */}
-        <div className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-hidden transition-all duration-500 ${styles.container}`}>
+        <div ref={verseCanvasRef} className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-hidden transition-all duration-500 ${styles.container}`}>
           {verseData ? (
             <div className="animate-in fade-in zoom-in-95 duration-500">
               <header className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans relative`}>
@@ -1603,6 +1725,7 @@ const App = () => {
                                 </span>
                               )}
                               <span
+                                data-word-id={w.id}
                                 role="button"
                                 tabIndex={0}
                                 onClick={() => handleBunchedWordClick(w.id)}
