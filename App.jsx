@@ -690,7 +690,7 @@ const App = () => {
       let globalWordCounter = 0;
 
       for (const query of chaptersToFetch) {
-        const esvUrl = `https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(query)}&include-headings=true&include-footnotes=false&include-verse-numbers=true&include-short-copyright=false&include-passage-references=false`;
+        const esvUrl = `https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(query)}&include-headings=true&include-heading-horizontal-lines=true&include-footnotes=false&include-verse-numbers=true&include-short-copyright=false&include-passage-references=false`;
         
         const data = await fetchWithRetry(esvUrl, {
           headers: { 'Authorization': `Token ${API_TOKEN}` }
@@ -698,56 +698,91 @@ const App = () => {
 
         if (data.passages?.[0]) {
           const rawText = data.passages[0].trim();
-          const blocks = rawText.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+          const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
           let currentVerse = 1;
           let currentPassageHeading = null;
           const wordsInChapter = [];
+          let i = 0;
 
-          for (const block of blocks) {
-            let contentToParse = block;
-            if (block.includes('\n')) {
-              const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-              const firstLine = lines[0];
-              const looksLikeVerse = /^\[?\d+\]?\s/.test(firstLine) || /^\d+\s/.test(firstLine);
-              const looksLikeHeading = !looksLikeVerse && 
-                firstLine.length > 0 && 
-                firstLine.length < 100 && 
-                !/^[\[\d\s\]]+$/.test(firstLine) &&
-                !/[.,:;!?]$/.test(firstLine.trim()) && // Doesn't end with sentence punctuation
-                !/["'"]/.test(firstLine) && // Doesn't contain quotes
-                !/^(And|Then|But|So|Now|When|After|Before|While|As|If|Because|For|The|A|An)\s/i.test(firstLine); // Doesn't start with common quote/sentence starters
-              if (looksLikeHeading) {
-                currentPassageHeading = firstLine;
-                contentToParse = lines.slice(1).join(' ');
-              }
-            } else {
-              const isHeadingOnly = !/^\[?\d+\]?\s/.test(block) && 
-                !/^\d+\s/.test(block) && 
-                block.length > 0 && 
-                block.length < 100 && 
-                !/^[\[\d\s\]]+$/.test(block) &&
-                !/[.,:;!?]$/.test(block.trim()) && // Doesn't end with sentence punctuation
-                !/["'"]/.test(block) && // Doesn't contain quotes
-                !/^(And|Then|But|So|Now|When|After|Before|While|As|If|Because|For|The|A|An)\s/i.test(block); // Doesn't start with common quote/sentence starters
-              if (isHeadingOnly) {
-                currentPassageHeading = block;
+          while (i < lines.length) {
+            const line = lines[i];
+            
+            // Check if this line is a heading horizontal line (underscores)
+            const isHeadingLine = /^_+$/.test(line) || /^=+$/.test(line);
+            
+            if (isHeadingLine && i + 1 < lines.length) {
+              // The next line should be the heading
+              const headingText = lines[i + 1];
+              // Verify it's not a verse number line
+              if (!/^\[?\d+\]?\s/.test(headingText) && !/^\d+\s/.test(headingText)) {
+                currentPassageHeading = headingText;
+                i += 2; // Skip both the underscore line and the heading line
                 continue;
               }
             }
-            const blockNormalized = contentToParse.replace(/([-–—])/g, ' $1 ');
+            
+            // Check if line starts with verse number
+            const verseNumMatch = line.match(/^\[?(\d+)\]?\s/);
+            if (verseNumMatch) {
+              currentVerse = parseInt(verseNumMatch[1], 10);
+              // Parse the rest of the line as content
+              const contentAfterVerse = line.replace(/^\[?\d+\]?\s*/, '');
+              if (contentAfterVerse) {
+                const blockNormalized = contentAfterVerse.replace(/([-–—])/g, ' $1 ');
+                const rawTokens = blockNormalized.split(/\s+/);
+                const processedTokens = rawTokens.filter(t => t.length > 0);
+                
+                for (const token of processedTokens) {
+                  let text = token;
+                  const exactVerse = token.match(/^\[?(\d+)\]?$/);
+                  const prefixVerse = token.match(/^\[?(\d+)\]?(.+)$/);
+                  if (exactVerse) {
+                    currentVerse = parseInt(exactVerse[1], 10);
+                    continue;
+                  }
+                  if (prefixVerse) {
+                    currentVerse = parseInt(prefixVerse[1], 10);
+                    text = prefixVerse[2];
+                  }
+                  if (!text) continue;
+                  const wordObj = {
+                    id: globalWordCounter++,
+                    text,
+                    letters: text.split(''),
+                    verseNum: currentVerse,
+                    sectionIdx: sections.length,
+                    passageHeading: currentPassageHeading
+                  };
+                  allWords.push(wordObj);
+                  wordsInChapter.push(wordObj);
+                }
+              }
+              i++;
+              continue;
+            }
+            
+            // Regular content line (no verse number at start)
+            const blockNormalized = line.replace(/([-–—])/g, ' $1 ');
             const rawTokens = blockNormalized.split(/\s+/);
             const processedTokens = rawTokens.filter(t => t.length > 0);
 
             for (const token of processedTokens) {
-              const verseNumMatch = token.match(/^\[?(\d+)\]?$/);
-              if (verseNumMatch) {
-                currentVerse = parseInt(verseNumMatch[1], 10);
+              let text = token;
+              const exactVerse = token.match(/^\[?(\d+)\]?$/);
+              const prefixVerse = token.match(/^\[?(\d+)\]?(.+)$/);
+              if (exactVerse) {
+                currentVerse = parseInt(exactVerse[1], 10);
                 continue;
               }
+              if (prefixVerse) {
+                currentVerse = parseInt(prefixVerse[1], 10);
+                text = prefixVerse[2];
+              }
+              if (!text) continue;
               const wordObj = {
                 id: globalWordCounter++,
-                text: token,
-                letters: token.split(''),
+                text,
+                letters: text.split(''),
                 verseNum: currentVerse,
                 sectionIdx: sections.length,
                 passageHeading: currentPassageHeading
@@ -755,6 +790,8 @@ const App = () => {
               allWords.push(wordObj);
               wordsInChapter.push(wordObj);
             }
+            
+            i++;
           }
 
           sections.push({
@@ -1716,12 +1753,12 @@ const App = () => {
                               )}
                               {showPassageHeadings && w.passageHeading && (prev == null || prev.passageHeading !== w.passageHeading) && (
                                 <span className="block mt-4 mb-1">
-                                  <span className={`text-sm italic ${paper.text} opacity-70`}>{w.passageHeading}</span>
+                                  <span className={`text-sm italic ${paper.text} ${styles.passage} opacity-70`}>{w.passageHeading}</span>
                                 </span>
                               )}
                               {showVerseNumbers && isFirstInVerse && (
-                                <span className={`text-xs align-super ${paper.text} opacity-50 mr-0.5`} style={{ fontVariantNumeric: 'tabular-nums' }}>
-                                  {(w.verseNum ?? 1)}{' '}
+                                <span className={`text-[10px] align-super ${paper.text} opacity-50 mr-0.5`} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                  {w.verseNum ?? 1}{' '}
                                 </span>
                               )}
                               <span
@@ -1762,13 +1799,13 @@ const App = () => {
                         {section.words.map((word, wIdx) => (
                           <React.Fragment key={word.id}>
                             {showPassageHeadings && word.passageHeading && (wIdx === 0 || section.words[wIdx - 1]?.passageHeading !== word.passageHeading) && (
-                              <span className="w-full text-base italic opacity-75 mb-2" style={{ flexBasis: '100%' }}>
+                              <span className={`w-full text-sm italic ${paper.text} ${styles.passage} opacity-75 mb-2`} style={{ flexBasis: '100%' }}>
                                 {word.passageHeading}
                               </span>
                             )}
                             {showVerseNumbers && (wIdx === 0 || (section.words[wIdx - 1]?.verseNum !== word.verseNum)) && (
-                              <span className={`text-sm align-super ${paper.text} opacity-60 mr-0.5`} style={{ fontVariantNumeric: 'tabular-nums' }}>
-                                {(word.verseNum ?? 1)}
+                              <span className={`text-[10px] align-super ${paper.text} opacity-60 mr-0.5`} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                {word.verseNum ?? 1}
                               </span>
                             )}
                             <Word 
