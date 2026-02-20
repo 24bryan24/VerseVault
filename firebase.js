@@ -52,6 +52,7 @@ export async function getUserPassages(userId) {
       const lastPassage = typeof data.lastPassage === 'string' ? data.lastPassage : '';
       const visibilityMode = typeof data.visibilityMode === 'string' && VALID_VISIBILITY_MODES.includes(data.visibilityMode) ? data.visibilityMode : 'full';
       const showFirstLetters = typeof data.showFirstLetters === 'boolean' ? data.showFirstLetters : false;
+      const verseStyles = data.verseStyles && typeof data.verseStyles === 'object' ? data.verseStyles : {};
       return {
         recentPassages: Array.isArray(data.recentPassages) ? data.recentPassages : [],
         favoritePassages: Array.isArray(data.favoritePassages) ? data.favoritePassages : [],
@@ -62,6 +63,7 @@ export async function getUserPassages(userId) {
         lastPassage,
         visibilityMode,
         showFirstLetters,
+        verseStyles,
       };
     }
   } catch (e) {
@@ -69,7 +71,24 @@ export async function getUserPassages(userId) {
       console.warn('VerseVault Firestore load failed:', e.code || e.message, e.message);
     }
   }
-  return { recentPassages: [], favoritePassages: [], themeIdx: 0, appBgIdx: 0, fontOption: 'modern', bgOption: 'blank', lastPassage: '', visibilityMode: 'full', showFirstLetters: false };
+  return { recentPassages: [], favoritePassages: [], themeIdx: 0, appBgIdx: 0, fontOption: 'modern', bgOption: 'blank', lastPassage: '', visibilityMode: 'full', showFirstLetters: false, verseStyles: {} };
+}
+
+const HIGHLIGHT_COLORS = ['yellow', 'green', 'blue', 'pink', 'orange', 'purple'];
+const MAX_FONT_DELTA = 4;
+const MIN_FONT_DELTA = -2;
+
+export async function setVerseStyles(userId, verseStyles) {
+  const firestore = getDb();
+  if (!firestore || !userId || typeof verseStyles !== 'object') return;
+  try {
+    const userRef = doc(firestore, USERS_COLLECTION, userId);
+    await setDoc(userRef, { verseStyles }, { merge: true });
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn('VerseVault Firestore verseStyles save failed:', e.code || e.message, e.message);
+    }
+  }
 }
 
 export async function setUserPassages(userId, { recentPassages, favoritePassages, themeIdx, appBgIdx, fontOption, bgOption, lastPassage, visibilityMode, showFirstLetters }) {
