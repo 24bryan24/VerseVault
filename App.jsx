@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from '@clerk/clerk-react';
 import { getUserPassages, setUserPassages, setVerseStyles as saveVerseStyles } from './firebase';
 import { List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2, Lightbulb, Paperclip, ListOrdered, FileText, Bold, Italic, Minus, Plus, Underline, StickyNote, Highlighter, RotateCw, Sparkles, Eraser } from 'lucide-react';
@@ -278,9 +277,7 @@ const App = () => {
   const [selectedVerseKeys, setSelectedVerseKeys] = useState(() => new Set()); // verses that stay highlighted (underline)
   const [verseToolbarNoteOpen, setVerseToolbarNoteOpen] = useState(false);
   const [verseToolbarHighlighterOpen, setVerseToolbarHighlighterOpen] = useState(false);
-  const highlighterBtnRef = useRef(null);
-  const noteBtnRef = useRef(null);
-  const [popoverPosition, setPopoverPosition] = useState({ highlighter: { top: 0, left: 0 }, note: { top: 0, left: 0 } });
+  const highlighterCloseTimeoutRef = useRef(null);
   const [suggestionModalOpen, setSuggestionModalOpen] = useState(false);
   const [suggestionStatus, setSuggestionStatus] = useState('idle'); // idle | sending | success | error
   const [suggestionName, setSuggestionName] = useState('');
@@ -389,6 +386,24 @@ const App = () => {
   const FONT_DELTA_MIN = -2;
   const FONT_DELTA_MAX = 4;
 
+  // Where to render the verse toolbar: immediately above the first occurrence of the selected verse
+  const selectedVerseToolbarSlot = useMemo(() => {
+    if (!verseData || !selectedVerseKey) return null;
+    const ref = verseData.reference;
+    for (let sIdx = 0; sIdx < verseData.sections.length; sIdx++) {
+      const sec = verseData.sections[sIdx];
+      for (let wIdx = 0; wIdx < sec.words.length; wIdx++) {
+        const w = sec.words[wIdx];
+        const vk = getVerseKey(ref, w.verseNum);
+        const isFirst = wIdx === 0 || sec.words[wIdx - 1].verseNum !== w.verseNum;
+        if (vk === selectedVerseKey && isFirst) return { view: 'sections', sIdx, wordId: w.id };
+      }
+    }
+    const idx = verseData.allWords.findIndex(w => getVerseKey(ref, w.verseNum) === selectedVerseKey);
+    if (idx >= 0) return { view: 'firstLetters', index: idx };
+    return null;
+  }, [verseData, selectedVerseKey]);
+
   const verseStyleHistoryRef = useRef({ past: [], future: [] });
   const [verseStyleHistoryCounts, setVerseStyleHistoryCounts] = useState({ undo: 0, redo: 0 });
   const HISTORY_MAX = 30;
@@ -446,6 +461,48 @@ const App = () => {
     });
   };
 
+  // Apply style change to all verses currently selected (toolbar affects whole selection)
+  const getTargetVerseKeys = () => (selectedVerseKeys.size > 0 ? Array.from(selectedVerseKeys) : (selectedVerseKey ? [selectedVerseKey] : []));
+  const updateSelectedVersesStyle = (patchOrFn) => {
+    const keys = getTargetVerseKeys();
+    if (keys.length === 0) return;
+    setVerseStyles(prev => {
+      verseStyleHistoryRef.current.past.push(JSON.stringify(prev));
+      if (verseStyleHistoryRef.current.past.length > HISTORY_MAX) verseStyleHistoryRef.current.past.shift();
+      verseStyleHistoryRef.current.future = [];
+      setVerseStyleHistoryCounts(c => ({ undo: Math.min(verseStyleHistoryRef.current.past.length, HISTORY_MAX), redo: 0 }));
+      let next = { ...prev };
+      for (const key of keys) {
+        const current = next[key] || {};
+        const patch = typeof patchOrFn === 'function' ? patchOrFn(key, current) : patchOrFn;
+        const merged = { ...current, ...patch };
+        const cleaned = Object.fromEntries(
+          Object.entries(merged).filter(([, v]) => v !== undefined && v !== null && v !== '')
+        );
+        next[key] = Object.keys(cleaned).length ? cleaned : undefined;
+      }
+      const toSave = Object.fromEntries(Object.entries(next).filter(([, v]) => v != null));
+      if (userId) saveVerseStyles(userId, toSave);
+      return next;
+    });
+  };
+
+  const clearFormattingForSelectedVerses = () => {
+    const keys = getTargetVerseKeys();
+    if (keys.length === 0) return;
+    setVerseStyles(prev => {
+      verseStyleHistoryRef.current.past.push(JSON.stringify(prev));
+      if (verseStyleHistoryRef.current.past.length > HISTORY_MAX) verseStyleHistoryRef.current.past.shift();
+      verseStyleHistoryRef.current.future = [];
+      setVerseStyleHistoryCounts(c => ({ undo: verseStyleHistoryRef.current.past.length, redo: 0 }));
+      const next = { ...prev };
+      for (const key of keys) delete next[key];
+      const toSave = Object.fromEntries(Object.entries(next).filter(([, v]) => v != null));
+      if (userId) saveVerseStyles(userId, toSave);
+      return next;
+    });
+  };
+
   const selectedVerseStyle = selectedVerseKey ? (verseStyles[selectedVerseKey] || {}) : null;
 
   const handleVerseNumberClick = (verseKey) => {
@@ -453,13 +510,7 @@ const App = () => {
       const next = new Set(prev);
       if (next.has(verseKey)) {
         next.delete(verseKey);
-        setVerseStyles(s => {
-          const nextStyles = { ...s };
-          delete nextStyles[verseKey];
-          const toSave = Object.fromEntries(Object.entries(nextStyles).filter(([, v]) => v != null));
-          if (userId) saveVerseStyles(userId, toSave);
-          return nextStyles;
-        });
+        // Don't delete verse styles — they persist. Use Trash button to clear formatting.
         setSelectedVerseKey(current => (current === verseKey ? (next.size ? Array.from(next).pop() : null) : current));
         return next;
       }
@@ -751,23 +802,10 @@ const App = () => {
     setVerseToolbarHighlighterOpen(false);
   }, [selectedVerseKey]);
 
-  // Update popover positions when they open (for portal rendering above buttons)
+  // Clear highlighter close timeout on unmount
   useEffect(() => {
-    if (!verseToolbarHighlighterOpen && !verseToolbarNoteOpen) return;
-    const update = () => {
-      if (highlighterBtnRef.current && verseToolbarHighlighterOpen) {
-        const r = highlighterBtnRef.current.getBoundingClientRect();
-        setPopoverPosition(prev => ({ ...prev, highlighter: { top: r.top, left: r.left + r.width / 2 } }));
-      }
-      if (noteBtnRef.current && verseToolbarNoteOpen) {
-        const r = noteBtnRef.current.getBoundingClientRect();
-        setPopoverPosition(prev => ({ ...prev, note: { top: r.top, left: r.left + r.width / 2 } }));
-      }
-    };
-    update();
-    const t = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(t);
-  }, [verseToolbarHighlighterOpen, verseToolbarNoteOpen]);
+    return () => { if (highlighterCloseTimeoutRef.current) clearTimeout(highlighterCloseTimeoutRef.current); };
+  }, []);
 
   const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
     try {
@@ -1079,8 +1117,6 @@ const App = () => {
   };
 
   const handleWordClick = (wordId) => {
-    const word = verseData?.allWords?.find(w => w.id === wordId);
-    if (word && verseData?.reference) handleVerseNumberClick(getVerseKey(verseData.reference, word.verseNum));
     if (visibilityMode === 'full') return;
     if (visibilityMode === 'wpm') {
       const idx = verseData?.allWords?.findIndex(w => w.id === wordId) ?? -1;
@@ -1246,7 +1282,6 @@ const App = () => {
 
   const handleBunchedWordClick = (wordId) => {
     const word = verseData?.allWords?.find(w => w.id === wordId);
-    if (word && verseData?.reference) handleVerseNumberClick(getVerseKey(verseData.reference, word.verseNum));
     const baseLimit = (visibilityMode === 'full' || visibilityMode === 'wpm') ? 999 : parseInt(visibilityMode);
     if (!word) return;
     const countAlphanumeric = (w) => w.text.split('').filter(c => /[a-zA-Z0-9]/.test(c)).length;
@@ -1256,6 +1291,58 @@ const App = () => {
       setBunchedReveal(prev => ({ ...prev, [wordId]: (prev[wordId] || 0) + 1 }));
     }
   };
+
+  const verseToolbarEl = selectedVerseKey && verseData && (
+    <div className="mb-4 w-full flex justify-center">
+      <div className="mx-auto max-w-[min(100%,42rem)] px-3 py-2 rounded-full bg-white border border-slate-200 shadow-lg z-[100] flex flex-nowrap items-center justify-center gap-0 overflow-visible animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button type="button" onClick={() => updateSelectedVersesStyle({ bold: !selectedVerseStyle?.bold })} className={`w-7 h-7 flex items-center justify-center rounded font-bold text-xs ${selectedVerseStyle?.bold ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Bold">B</button>
+          <button type="button" onClick={() => updateSelectedVersesStyle({ italic: !selectedVerseStyle?.italic })} className={`w-7 h-7 flex items-center justify-center rounded italic font-serif text-xs ${selectedVerseStyle?.italic ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Italic">I</button>
+          <button type="button" onClick={() => updateSelectedVersesStyle({ underline: !selectedVerseStyle?.underline })} className={`w-7 h-7 flex items-center justify-center rounded text-xs underline decoration-2 ${selectedVerseStyle?.underline ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Underline">U</button>
+        </div>
+        <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
+        <div className="relative shrink-0 pt-12 -mt-12" onMouseEnter={() => { if (highlighterCloseTimeoutRef.current) { clearTimeout(highlighterCloseTimeoutRef.current); highlighterCloseTimeoutRef.current = null; } setVerseToolbarHighlighterOpen(true); setVerseToolbarNoteOpen(false); }} onMouseLeave={() => { highlighterCloseTimeoutRef.current = setTimeout(() => { setVerseToolbarHighlighterOpen(false); highlighterCloseTimeoutRef.current = null; }, 500); }}>
+          <button type="button" onClick={() => { setVerseToolbarHighlighterOpen(o => !o); setVerseToolbarNoteOpen(false); }} className={`w-7 h-7 flex items-center justify-center rounded ${(selectedVerseStyle?.highlight && selectedVerseStyle.highlight !== 'none') ? 'ring-2 ring-slate-300 ring-offset-1' : ''} text-amber-500 hover:bg-slate-100`} title="Highlight color"><Highlighter size={15} /></button>
+          {verseToolbarHighlighterOpen && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-0 px-2 py-2 rounded-lg bg-white border border-slate-200 shadow-xl z-[110] flex flex-nowrap items-center justify-center gap-1.5">
+              {VERSE_HIGHLIGHT_COLORS.filter(c => c.id !== 'none').map(({ id, label, class: c }) => (
+                <button key={id} type="button" title={label} onClick={() => { updateSelectedVersesStyle({ highlight: (selectedVerseStyle?.highlight || 'none') === id ? undefined : id }); setVerseToolbarHighlighterOpen(false); }} className={`w-6 h-6 rounded-full border-2 shrink-0 ${(selectedVerseStyle?.highlight || 'none') === id ? 'border-slate-600 ring-2 ring-slate-300 ring-offset-1' : 'border-slate-200 hover:border-slate-300'} ${c} hover:scale-110 transition-transform`} />
+              ))}
+              <button type="button" title="No highlight" onClick={() => { updateSelectedVersesStyle({ highlight: undefined }); setVerseToolbarHighlighterOpen(false); }} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${(selectedVerseStyle?.highlight || 'none') === 'none' ? 'border-slate-600 bg-slate-100 ring-2 ring-slate-300' : 'border-slate-200 bg-white hover:border-slate-300'}`}><X size={10} className="text-slate-500" /></button>
+            </div>
+          )}
+        </div>
+        <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button type="button" onClick={() => updateSelectedVersesStyle((_, s) => ({ fontSizeDelta: Math.max(FONT_DELTA_MIN, (s?.fontSizeDelta ?? 0) - 1) }))} className="w-7 h-7 flex items-center justify-center rounded text-slate-700 hover:bg-slate-100 text-xs font-medium" title="Decrease font size">A-</button>
+          <button type="button" onClick={() => updateSelectedVersesStyle((_, s) => ({ fontSizeDelta: Math.min(FONT_DELTA_MAX, (s?.fontSizeDelta ?? 0) + 1) }))} className="w-7 h-7 flex items-center justify-center rounded text-slate-700 hover:bg-slate-100 text-xs font-medium" title="Increase font size">A+</button>
+        </div>
+        <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
+        <button type="button" onClick={() => clearFormattingForSelectedVerses()} className="w-7 h-7 shrink-0 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100" title="Clear formatting"><Eraser size={14} /></button>
+        <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
+        <div className="relative shrink-0">
+          <button type="button" onClick={() => { setVerseToolbarNoteOpen(o => !o); setVerseToolbarHighlighterOpen(false); }} className={`w-7 h-7 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100 ${selectedVerseStyle?.note ? 'ring-2 ring-slate-300 ring-offset-1' : ''}`} title="Add a note"><StickyNote size={15} /></button>
+          {verseToolbarNoteOpen && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 p-2 rounded-lg bg-white border border-slate-200 shadow-xl z-[110] min-w-[200px]">
+              <input type="text" value={selectedVerseStyle?.note ?? ''} onChange={(e) => updateSelectedVersesStyle({ note: e.target.value || undefined })} placeholder="Note for this verse..." className="w-full text-sm px-2.5 py-1.5 rounded border border-slate-200 text-slate-700 placeholder:text-slate-400" autoFocus />
+              <button type="button" onClick={() => setVerseToolbarNoteOpen(false)} className="mt-1.5 w-full py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded">Done</button>
+            </div>
+          )}
+        </div>
+        <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button type="button" onClick={handleVerseStyleUndo} disabled={verseStyleHistoryCounts.undo === 0} className="w-7 h-7 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none" title="Undo"><RotateCcw size={14} /></button>
+          <button type="button" onClick={handleVerseStyleRedo} disabled={verseStyleHistoryCounts.redo === 0} className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none" title="Redo"><RotateCw size={14} /></button>
+        </div>
+        <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
+        <button type="button" className="w-auto h-7 px-2 shrink-0 flex items-center gap-1 rounded text-blue-600 hover:bg-blue-50 font-medium text-xs" title="Study this verse"><Sparkles size={12} /> Study</button>
+        <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
+        <button type="button" onClick={() => { clearFormattingForSelectedVerses(); setSelectedVerseKeys(new Set()); setSelectedVerseKey(null); }} className="w-7 h-7 shrink-0 flex items-center justify-center rounded text-red-500 hover:bg-red-50" title="Remove highlight and style"><Trash2 size={14} /></button>
+        <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
+        <span className="text-slate-500 text-xs font-medium tabular-nums px-0.5 shrink-0" title="Highlighted verses">{selectedVerseKeys.size}</span>
+      </div>
+    </div>
+  );
 
   return (
     <div className={`min-h-screen transition-all duration-700 p-4 md:p-10 font-sans ${appBg.container}`}>
@@ -1864,7 +1951,7 @@ const App = () => {
         )}
 
         {/* Verse Canvas */}
-        <div ref={verseCanvasRef} className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-hidden transition-all duration-500 ${styles.container}`}>
+        <div ref={verseCanvasRef} className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-visible transition-all duration-500 ${styles.container}`}>
           {verseData ? (
             <div className="animate-in fade-in zoom-in-95 duration-500">
               <header className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans relative`}>
@@ -1882,68 +1969,6 @@ const App = () => {
                 <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
               </header>
 
-              {selectedVerseKey && verseData && (
-                <div className="mb-6 mx-auto max-w-[min(100%,42rem)] px-3 py-2 rounded-full bg-white border border-slate-200 shadow-lg sticky top-4 z-[100] flex flex-nowrap items-center justify-center gap-0 overflow-x-auto overflow-y-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                  {/* B I U */}
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button type="button" onClick={() => updateVerseStyle(selectedVerseKey, { bold: !selectedVerseStyle?.bold })} className={`w-7 h-7 flex items-center justify-center rounded font-bold text-xs ${selectedVerseStyle?.bold ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Bold">B</button>
-                    <button type="button" onClick={() => updateVerseStyle(selectedVerseKey, { italic: !selectedVerseStyle?.italic })} className={`w-7 h-7 flex items-center justify-center rounded italic font-serif text-xs ${selectedVerseStyle?.italic ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Italic">I</button>
-                    <button type="button" onClick={() => updateVerseStyle(selectedVerseKey, { underline: !selectedVerseStyle?.underline })} className={`w-7 h-7 flex items-center justify-center rounded text-xs underline decoration-2 ${selectedVerseStyle?.underline ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Underline">U</button>
-                  </div>
-                  <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
-                  {/* Highlighter - colors above button, show on hover or click/touch */}
-                  <div
-                    className="relative shrink-0"
-                    onMouseEnter={() => { setVerseToolbarHighlighterOpen(true); setVerseToolbarNoteOpen(false); }}
-                    onMouseLeave={() => setVerseToolbarHighlighterOpen(false)}
-                  >
-                    <button ref={highlighterBtnRef} type="button" onClick={() => { setVerseToolbarHighlighterOpen(o => !o); setVerseToolbarNoteOpen(false); }} className={`w-7 h-7 flex items-center justify-center rounded ${(selectedVerseStyle?.highlight && selectedVerseStyle.highlight !== 'none') ? 'ring-2 ring-slate-300 ring-offset-1' : ''} text-amber-500 hover:bg-slate-100`} title="Highlight color"><Highlighter size={15} /></button>
-                  </div>
-                  <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
-                  {/* A- A+ */}
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button type="button" onClick={() => updateVerseStyle(selectedVerseKey, { fontSizeDelta: Math.max(FONT_DELTA_MIN, (selectedVerseStyle?.fontSizeDelta ?? 0) - 1) })} className="w-7 h-7 flex items-center justify-center rounded text-slate-700 hover:bg-slate-100 text-xs font-medium" title="Decrease font size">A-</button>
-                    <button type="button" onClick={() => updateVerseStyle(selectedVerseKey, { fontSizeDelta: Math.min(FONT_DELTA_MAX, (selectedVerseStyle?.fontSizeDelta ?? 0) + 1) })} className="w-7 h-7 flex items-center justify-center rounded text-slate-700 hover:bg-slate-100 text-xs font-medium" title="Increase font size">A+</button>
-                  </div>
-                  <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
-                  <button type="button" onClick={() => clearVerseFormatting(selectedVerseKey)} className="w-7 h-7 shrink-0 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100" title="Clear formatting"><Eraser size={14} /></button>
-                  <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
-                  {/* Note - text box above icon when clicked/touched */}
-                  <div className="relative shrink-0">
-                    <button ref={noteBtnRef} type="button" onClick={() => { setVerseToolbarNoteOpen(o => !o); setVerseToolbarHighlighterOpen(false); }} className={`w-7 h-7 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100 ${selectedVerseStyle?.note ? 'ring-2 ring-slate-300 ring-offset-1' : ''}`} title="Add a note"><StickyNote size={15} /></button>
-                  </div>
-                  <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button type="button" onClick={handleVerseStyleUndo} disabled={verseStyleHistoryCounts.undo === 0} className="w-7 h-7 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none" title="Undo"><RotateCcw size={14} /></button>
-                    <button type="button" onClick={handleVerseStyleRedo} disabled={verseStyleHistoryCounts.redo === 0} className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none" title="Redo"><RotateCw size={14} /></button>
-                  </div>
-                  <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
-                  <button type="button" className="w-auto h-7 px-2 shrink-0 flex items-center gap-1 rounded text-blue-600 hover:bg-blue-50 font-medium text-xs" title="Study this verse"><Sparkles size={12} /> Study</button>
-                  <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
-                  <button type="button" onClick={() => handleVerseNumberClick(selectedVerseKey)} className="w-7 h-7 shrink-0 flex items-center justify-center rounded text-red-500 hover:bg-red-50" title="Remove highlight and style"><Trash2 size={14} /></button>
-                  <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" aria-hidden />
-                  <span className="text-slate-500 text-xs font-medium tabular-nums px-0.5 shrink-0" title="Highlighted verses">{selectedVerseKeys.size}</span>
-                </div>
-              )}
-
-              {verseToolbarHighlighterOpen && typeof document !== 'undefined' && createPortal(
-                <div className="px-2.5 py-2 rounded-lg bg-white border border-slate-200 shadow-xl flex items-center gap-1.5" style={{ position: 'fixed', left: popoverPosition.highlighter.left, top: popoverPosition.highlighter.top - 6, transform: 'translate(-50%, -100%)', zIndex: 9999 }}>
-                  {VERSE_HIGHLIGHT_COLORS.filter(c => c.id !== 'none').map(({ id, class: c }) => (
-                    <button key={id} type="button" title={id} onClick={() => { updateVerseStyle(selectedVerseKey, { highlight: (selectedVerseStyle?.highlight || 'none') === id ? undefined : id }); setVerseToolbarHighlighterOpen(false); }} className={`w-6 h-6 rounded-full border ${(selectedVerseStyle?.highlight || 'none') === id ? 'border-slate-600 ring-1 ring-slate-400' : 'border-slate-200'} ${c} hover:opacity-90`} />
-                  ))}
-                  <button type="button" title="No highlight" onClick={() => { updateVerseStyle(selectedVerseKey, { highlight: undefined }); setVerseToolbarHighlighterOpen(false); }} className={`w-6 h-6 rounded-full border flex items-center justify-center ${(selectedVerseStyle?.highlight || 'none') === 'none' ? 'border-slate-600 bg-slate-100' : 'border-slate-200 bg-white'}`}><X size={10} className="text-slate-500" /></button>
-                </div>,
-                document.body
-              )}
-
-              {verseToolbarNoteOpen && typeof document !== 'undefined' && createPortal(
-                <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-xl min-w-[200px]" style={{ position: 'fixed', left: popoverPosition.note.left, top: popoverPosition.note.top - 6, transform: 'translate(-50%, -100%)', zIndex: 9999 }}>
-                  <input type="text" value={selectedVerseStyle?.note ?? ''} onChange={(e) => updateVerseStyle(selectedVerseKey, { note: e.target.value || undefined })} placeholder="Note for this verse..." className="w-full text-sm px-2.5 py-1.5 rounded border border-slate-200 text-slate-700 placeholder:text-slate-400" autoFocus />
-                  <button type="button" onClick={() => setVerseToolbarNoteOpen(false)} className="mt-1.5 w-full py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded">Done</button>
-                </div>,
-                document.body
-              )}
-
               <div className="space-y-20">
                 {showFirstLetters ? (
                   <div className="animate-in fade-in duration-500">
@@ -1958,6 +1983,7 @@ const App = () => {
                           const verseStyle = getVerseStyleForWord(verseKey);
                           return (
                             <React.Fragment key={w.id}>
+                              {selectedVerseToolbarSlot?.view === 'firstLetters' && i === selectedVerseToolbarSlot.index && verseToolbarEl}
                               {isFirstInSection && showChapterHeadings && section && (
                                 <span className="block mt-6 mb-2">
                                   <span className={`text-base ${theme.text} font-bold opacity-80 mr-2`}>{section.title}</span>
@@ -1974,7 +2000,8 @@ const App = () => {
                                   tabIndex={0}
                                   onClick={(e) => { e.stopPropagation(); handleVerseNumberClick(verseKey); }}
                                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleVerseNumberClick(verseKey); } }}
-                                  className={`text-[10px] align-super ${paper.text} opacity-50 mr-0.5 cursor-pointer hover:opacity-80 rounded px-0.5 -mx-0.5 touch-manipulation inline-flex items-center gap-0.5`}
+                                  className={`text-[10px] align-super mr-0.5 cursor-pointer touch-manipulation inline-flex items-center justify-center rounded-full w-6 h-6 shrink-0
+                                    ${selectedVerseKeys.has(verseKey) ? `ring-2 ring-offset-1 ${theme.border} ${theme.lightBg} ${theme.text} font-semibold opacity-100` : `${paper.text} opacity-50 hover:opacity-80`}`}
                                   style={{ fontVariantNumeric: 'tabular-nums' }}
                                   title={verseStyles[verseKey]?.note ? `Note: ${verseStyles[verseKey].note}` : (selectedVerseKeys.has(verseKey) ? 'Clear verse style' : 'Style this verse')}
                                 >
@@ -2023,6 +2050,9 @@ const App = () => {
                           const verseStyle = getVerseStyleForWord(verseKey);
                           return (
                             <React.Fragment key={word.id}>
+                              {selectedVerseToolbarSlot?.view === 'sections' && sIdx === selectedVerseToolbarSlot.sIdx && word.id === selectedVerseToolbarSlot.wordId && (
+                                <div style={{ flexBasis: '100%', width: '100%' }}>{verseToolbarEl}</div>
+                              )}
                               {showPassageHeadings && word.passageHeading && (wIdx === 0 || section.words[wIdx - 1]?.passageHeading !== word.passageHeading) && (
                                 <span className={`w-full text-sm italic ${paper.text} ${styles.passage} opacity-75 mb-2`} style={{ flexBasis: '100%' }}>
                                   {word.passageHeading}
@@ -2034,7 +2064,8 @@ const App = () => {
                                   tabIndex={0}
                                   onClick={(e) => { e.stopPropagation(); handleVerseNumberClick(verseKey); }}
                                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleVerseNumberClick(verseKey); } }}
-                                  className={`text-[10px] align-super ${paper.text} opacity-60 mr-0.5 cursor-pointer hover:opacity-80 rounded px-0.5 -mx-0.5 touch-manipulation inline-flex items-center gap-0.5`}
+                                  className={`text-[10px] align-super mr-0.5 cursor-pointer touch-manipulation inline-flex items-center justify-center rounded-full w-6 h-6 shrink-0
+                                    ${selectedVerseKeys.has(verseKey) ? `ring-2 ring-offset-1 ${theme.border} ${theme.lightBg} ${theme.text} font-semibold opacity-100` : `${paper.text} opacity-60 hover:opacity-80`}`}
                                   style={{ fontVariantNumeric: 'tabular-nums' }}
                                   title={verseStyles[verseKey]?.note ? `Note: ${verseStyles[verseKey].note}` : (selectedVerseKeys.has(verseKey) ? 'Clear verse style' : 'Style this verse')}
                                 >
