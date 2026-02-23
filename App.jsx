@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from '@clerk/clerk-react';
 import { getUserPassages, setUserPassages, setVerseStyles as saveVerseStyles } from './firebase';
-import { List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2, Lightbulb, Paperclip, ListOrdered, FileText, Bold, Italic, Minus, Plus, Underline, StickyNote, Highlighter, RotateCw, Sparkles, Eraser } from 'lucide-react';
+import { List, EyeOff, Layout, Type, RefreshCw, AlertCircle, GraduationCap, ChevronRight, ChevronDown, Timer, Eye, Play, Pause, RotateCcw, AlignLeft, Grid3X3, Square, CaseSensitive, BookOpen, Keyboard, ArrowRight, Palette, Paintbrush, Mountain, Heart, History, Star, X, Library, Book, Bookmark, LogIn, Trash2, Lightbulb, Paperclip, ListOrdered, FileText, Bold, Italic, Minus, Plus, Underline, StickyNote, Highlighter, RotateCw, Sparkles, Eraser } from 'lucide-react';
 
 // Simplified Bible Metadata for the selector
 const BIBLE_DATA = [
@@ -305,6 +305,16 @@ const App = () => {
   const prevVisibilityModeRef = useRef(visibilityMode);
   const prevShowFirstLettersRef = useRef(showFirstLetters);
   const scrollPositionRef = useRef({ wordId: null, scrollPercent: null });
+
+  // Reading timer: circle fills with scroll; when circle complete, timer starts. Shown at top and bottom of passage.
+  const [readingScrollProgress, setReadingScrollProgress] = useState(0);
+  const [readingTimerStarted, setReadingTimerStarted] = useState(false);
+  const [readingTimerSeconds, setReadingTimerSeconds] = useState(0);
+  const [readingTimerPaused, setReadingTimerPaused] = useState(false);
+  const readingTimerStartedRef = useRef(false);
+  const readingTimerIntervalRef = useRef(null);
+  const firstSentenceRef = useRef(null);
+  const passageHeadingRef = useRef(null);
 
   // Library State
   const [recentPassages, setRecentPassages] = useState([]);
@@ -666,6 +676,66 @@ const App = () => {
       if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
     };
   }, [isMobile, isToolbarStuck]);
+
+  // Reading timer: circle completes when passage heading reaches top of viewport (heading still visible); then timer starts.
+  useEffect(() => {
+    if (!verseData?.reference || !verseCanvasRef.current) return;
+    const el = verseCanvasRef.current;
+    const onScroll = () => {
+      const rect = el.getBoundingClientRect();
+      const passageTop = rect.top + window.scrollY;
+      const headingEl = passageHeadingRef.current;
+      if (!headingEl) {
+        setReadingScrollProgress(0);
+        return;
+      }
+      const headingRect = headingEl.getBoundingClientRect();
+      const headingTop = headingRect.top + window.scrollY;
+      const targetScroll = headingTop;
+      if (targetScroll <= passageTop) {
+        setReadingScrollProgress(1);
+        if (!readingTimerStartedRef.current) {
+          readingTimerStartedRef.current = true;
+          setReadingTimerStarted(true);
+        }
+        return;
+      }
+      const scrollRange = targetScroll - passageTop;
+      const scrolled = window.scrollY - passageTop;
+      const progress = Math.min(1, Math.max(0, scrolled / scrollRange));
+      setReadingScrollProgress(progress);
+      if (progress >= 1 && !readingTimerStartedRef.current) {
+        readingTimerStartedRef.current = true;
+        setReadingTimerStarted(true);
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    const raf = requestAnimationFrame(onScroll);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, [verseData?.reference]);
+
+  // Reading timer: tick every second once started and not paused.
+  useEffect(() => {
+    if (!readingTimerStarted || readingTimerPaused) return;
+    readingTimerIntervalRef.current = setInterval(() => {
+      setReadingTimerSeconds((s) => s + 1);
+    }, 1000);
+    return () => {
+      if (readingTimerIntervalRef.current) clearInterval(readingTimerIntervalRef.current);
+    };
+  }, [readingTimerStarted, readingTimerPaused]);
+
+  // Reset reading timer and circle when passage changes.
+  useEffect(() => {
+    setReadingScrollProgress(0);
+    setReadingTimerStarted(false);
+    setReadingTimerSeconds(0);
+    setReadingTimerPaused(false);
+    readingTimerStartedRef.current = false;
+  }, [verseData?.reference]);
 
   // Mobile: show context sidebar on scroll, hide after delay when scroll stops
   useEffect(() => {
@@ -1337,6 +1407,40 @@ const App = () => {
     }
   };
 
+  const formatReadingTimer = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const ReadingTimerOrCircle = ({ progress, started, seconds, paused, onPauseResume, theme }) => {
+    const size = 44;
+    const stroke = 3;
+    const r = (size - stroke) / 2;
+    const circumference = 2 * Math.PI * r;
+    const dashOffset = circumference * (1 - progress);
+    if (started) {
+      return (
+        <button
+          type="button"
+          onClick={onPauseResume}
+          className={`flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-slate-200/60 active:scale-[0.98] transition-all cursor-pointer ${theme?.text || 'text-slate-600'}`}
+          title={paused ? 'Tap to resume' : 'Tap to pause'}
+        >
+          <span className="text-lg font-mono font-semibold tabular-nums">{formatReadingTimer(seconds)}</span>
+        </button>
+      );
+    }
+    return (
+      <div className="flex items-center justify-center py-2" title="Scroll to fill and start timer">
+        <svg width={size} height={size} className="transform -rotate-90" viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} className="opacity-20" />
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" className={`transition-all duration-150 ${theme?.text || 'text-slate-600'}`} />
+        </svg>
+      </div>
+    );
+  };
+
   const verseToolbarEl = selectedVerseKey && verseData && (
     <div className="mb-4 w-full flex justify-center" data-verse-toolbar>
       <div className="w-full md:mx-auto md:max-w-[min(100%,42rem)] px-3 py-2 rounded-2xl md:rounded-full bg-white border border-slate-200 shadow-lg z-[100] flex flex-wrap md:flex-nowrap items-center justify-center gap-1 md:gap-0 overflow-visible animate-in fade-in slide-in-from-top-2 duration-200">
@@ -1739,7 +1843,8 @@ const App = () => {
         <div className={`sticky top-0 z-50 flex flex-col gap-3 bg-neutral-50/80 backdrop-blur-md py-3 px-3 rounded-2xl font-sans border border-white/20 shadow-sm transition-all duration-300 mb-8 ${isToolbarStuck ? 'group stuck' : ''} ${toolbarHidden && isToolbarStuck && isMobile ? '-translate-y-full pointer-events-none' : ''}`}>
           {/* When stuck on mobile: single row of icon-only buttons; otherwise two groups */}
           {isToolbarStuck ? (
-            <div className="flex items-center flex-nowrap gap-1 justify-center overflow-x-auto no-scrollbar w-full max-md:py-0.5">
+            <div className="flex items-center w-full gap-3 max-md:py-0.5">
+              <div className="flex flex-1 items-center flex-nowrap gap-1 justify-center overflow-x-auto no-scrollbar min-w-0">
               <button
                 onClick={() => { setVisibilityMode('full'); resetWpm(); }}
                 className={`p-2 rounded-lg text-xs font-bold transition-all shrink-0 min-w-[36px] flex items-center justify-center ${
@@ -1748,17 +1853,19 @@ const App = () => {
               >
                 <Eye size={14} />
               </button>
-              {['3', '2', '1'].map((id) => (
-                <button
-                  key={id}
-                  onClick={() => { setVisibilityMode(id); resetWpm(); }}
-                  className={`p-2 rounded-lg text-[10px] font-black transition-all shrink-0 min-w-[28px] flex items-center justify-center ${
-                    visibilityMode === id ? `${theme.bg} text-white shadow-lg ${theme.shadow}` : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'
-                  }`}
-                >
-                  {id}L
-                </button>
-              ))}
+              <button
+                onClick={() => {
+                  const next = (visibilityMode === '3' ? '2' : visibilityMode === '2' ? '1' : '3');
+                  setVisibilityMode(next);
+                  resetWpm();
+                }}
+                className={`p-2 rounded-lg text-[10px] font-black transition-all shrink-0 min-w-[36px] flex items-center justify-center ${
+                  ['1', '2', '3'].includes(visibilityMode) ? `${theme.bg} text-white shadow-lg ${theme.shadow}` : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'
+                }`}
+                title="Cycle 3L → 2L → 1L"
+              >
+                {['1', '2', '3'].includes(visibilityMode) ? `${visibilityMode}L` : '3L'}
+              </button>
               <button
                 onClick={() => { setVisibilityMode('wpm'); }}
                 className={`p-2 rounded-lg text-xs font-bold transition-all shrink-0 min-w-[36px] flex items-center justify-center ${
@@ -1813,6 +1920,12 @@ const App = () => {
                     <ListOrdered size={14} />
                   </button>
                 </>
+              )}
+              </div>
+              {verseData && readingTimerStarted && (
+                <button type="button" onClick={() => setReadingTimerPaused(p => !p)} className={`shrink-0 flex items-center py-1 px-2 rounded-lg bg-white/90 border border-slate-200/80 hover:bg-slate-100/80 active:scale-[0.98] transition-all ${theme?.text || 'text-slate-600'}`} title={readingTimerPaused ? 'Tap to resume' : 'Tap to pause'}>
+                  <span className="text-sm font-mono font-semibold tabular-nums">{formatReadingTimer(readingTimerSeconds)}</span>
+                </button>
               )}
             </div>
           ) : (
@@ -1996,20 +2109,43 @@ const App = () => {
         )}
 
         {/* Verse Canvas */}
-        <div ref={verseCanvasRef} className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-visible transition-all duration-500 ${styles.container}`}>
+        <div
+          ref={verseCanvasRef}
+          onClick={() => {
+            if (isMobile && isToolbarStuck) {
+              setToolbarHidden(false);
+              if (toolbarHideTimerRef.current) clearTimeout(toolbarHideTimerRef.current);
+              toolbarHideTimerRef.current = null;
+              if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
+              scrollEndTimerRef.current = setTimeout(() => {
+                if (toolbarHideTimerRef.current) clearTimeout(toolbarHideTimerRef.current);
+                toolbarHideTimerRef.current = setTimeout(() => setToolbarHidden(true), HIDE_TOOLBAR_AFTER_MS);
+              }, HIDE_TOOLBAR_AFTER_MS);
+              setSidebarVisible(true);
+              if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current);
+              sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750);
+            }
+          }}
+          className={`${paper.paper} rounded-[2.5rem] border p-8 md:p-16 min-h-[450px] relative overflow-visible transition-all duration-500 ${styles.container}`}
+        >
           {verseData ? (
             <div className="animate-in fade-in zoom-in-95 duration-500">
-              <header className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans relative`}>
-                <div className="relative group flex items-center gap-4">
-                  <h2 className={`text-2xl text-center ${styles.heading} ${paper.text} hover:${theme.text} transition-colors duration-300 cursor-default`}>
-                    {verseData.reference}
-                  </h2>
-                  <button 
-                    onClick={toggleFavorite}
-                    className={`transition-all active:scale-90 hover:scale-110 p-1.5 rounded-full ${favoritePassages.includes(verseData.reference) ? 'text-rose-500' : 'text-slate-300'}`}
-                  >
-                    <Heart size={20} fill={favoritePassages.includes(verseData.reference) ? "currentColor" : "none"} />
-                  </button>
+              <header ref={passageHeadingRef} className={`flex flex-col items-center justify-center mb-16 pb-8 border-b ${bgOption === 'charcoal' ? 'border-white/10' : 'border-black/5'} font-sans relative`}>
+                <div className="relative group flex items-center justify-between w-full gap-4">
+                  <div className="flex items-center gap-4 min-w-0 flex-1 justify-center">
+                    <h2 className={`text-2xl text-center ${styles.heading} ${paper.text} hover:${theme.text} transition-colors duration-300 cursor-default`}>
+                      {verseData.reference}
+                    </h2>
+                    <button 
+                      onClick={toggleFavorite}
+                      className={`shrink-0 transition-all active:scale-90 hover:scale-110 p-1.5 rounded-full ${favoritePassages.includes(verseData.reference) ? 'text-rose-500' : 'text-slate-300'}`}
+                    >
+                      <Heart size={20} fill={favoritePassages.includes(verseData.reference) ? "currentColor" : "none"} />
+                    </button>
+                  </div>
+                  <div className={`shrink-0 ${paper.text} opacity-90`}>
+                    <ReadingTimerOrCircle progress={readingScrollProgress} started={readingTimerStarted} seconds={readingTimerSeconds} paused={readingTimerPaused} onPauseResume={() => setReadingTimerPaused(p => !p)} theme={theme} />
+                  </div>
                 </div>
                 <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
               </header>
@@ -2053,7 +2189,7 @@ const App = () => {
                                   onClick={(e) => { e.stopPropagation(); handleVerseNumberClick(verseKey); }}
                                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleVerseNumberClick(verseKey); } }}
                                   className={`text-[10px] align-super mr-0.5 cursor-pointer touch-manipulation inline-flex items-center justify-center rounded-full w-6 h-6 shrink-0
-                                    ${selectedVerseKeys.has(verseKey) ? `ring-2 ring-offset-1 ${theme.border} ${theme.lightBg} ${theme.text} font-semibold opacity-100` : `${paper.text} opacity-50 hover:opacity-80`}`}
+                                    ${selectedVerseKeys.has(verseKey) ? `ring-2 ring-offset-1 ${theme.bg} text-white font-semibold opacity-100` : `${paper.text} opacity-50 hover:opacity-80`}`}
                                   style={{ fontVariantNumeric: 'tabular-nums' }}
                                   title={verseStyles[verseKey]?.note ? `Note: ${verseStyles[verseKey].note}` : (selectedVerseKeys.has(verseKey) ? 'Clear verse style' : 'Style this verse')}
                                 >
@@ -2062,6 +2198,7 @@ const App = () => {
                                 </span>
                               )}
                               <span
+                                ref={i === 0 ? firstSentenceRef : undefined}
                                 data-word-id={w.id}
                                 data-verse-key={verseKey}
                                 role="button"
@@ -2115,7 +2252,7 @@ const App = () => {
                                   onClick={(e) => { e.stopPropagation(); handleVerseNumberClick(verseKey); }}
                                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleVerseNumberClick(verseKey); } }}
                                   className={`text-[10px] align-super mr-0.5 cursor-pointer touch-manipulation inline-flex items-center justify-center rounded-full w-6 h-6 shrink-0
-                                    ${selectedVerseKeys.has(verseKey) ? `ring-2 ring-offset-1 ${theme.border} ${theme.lightBg} ${theme.text} font-semibold opacity-100` : `${paper.text} opacity-60 hover:opacity-80`}`}
+                                    ${selectedVerseKeys.has(verseKey) ? `ring-2 ring-offset-1 ${theme.bg} text-white font-semibold opacity-100` : `${paper.text} opacity-60 hover:opacity-80`}`}
                                   style={{ fontVariantNumeric: 'tabular-nums' }}
                                   title={verseStyles[verseKey]?.note ? `Note: ${verseStyles[verseKey].note}` : (selectedVerseKeys.has(verseKey) ? 'Clear verse style' : 'Style this verse')}
                                 >
@@ -2123,7 +2260,7 @@ const App = () => {
                                   {word.verseNum ?? 1}
                                 </span>
                               )}
-                              <span className={`inline-flex ${verseStyle.className}`} style={verseStyle.style} data-verse-key={verseKey}>
+                              <span ref={sIdx === 0 && wIdx === 0 ? firstSentenceRef : undefined} className={`inline-flex ${verseStyle.className}`} style={verseStyle.style} data-verse-key={verseKey}>
                                 <Word 
                                   word={word}
                                   visibilityMode={visibilityMode}
@@ -2141,6 +2278,13 @@ const App = () => {
                   ))
                 )}
               </div>
+
+              {/* Reading timer / scroll circle at bottom of passage */}
+              {verseData && (
+                <div className={`flex justify-center mt-12 ${paper.text} opacity-70`}>
+                  <ReadingTimerOrCircle progress={readingScrollProgress} started={readingTimerStarted} seconds={readingTimerSeconds} paused={readingTimerPaused} onPauseResume={() => setReadingTimerPaused(p => !p)} theme={theme} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-slate-200 pt-20 font-sans">
