@@ -293,6 +293,9 @@ const App = () => {
   const scrollEndTimerRef = useRef(null);
   const sidebarHideTimerRef = useRef(null);
   const sidebarScrollEndTimerRef = useRef(null);
+  const verseToolbarPointerDownOutsideRef = useRef(false);
+  const verseToolbarScrollJustHappenedRef = useRef(false);
+  const verseToolbarScrollClearTimeoutRef = useRef(null);
   const HIDE_TOOLBAR_AFTER_MS = 750;
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const verseCanvasRef = useRef(null);
@@ -807,17 +810,46 @@ const App = () => {
     return () => { if (highlighterCloseTimeoutRef.current) clearTimeout(highlighterCloseTimeoutRef.current); };
   }, []);
 
-  // Click away from verse / toolbar to deselect
+  // Close verse toolbar on release (pointerup) when tap/click started outside and scrolling hasn't just happened.
   useEffect(() => {
     if (!selectedVerseKey) return;
     const handlePointerDown = (e) => {
       const target = e.target;
-      if (target.closest('[data-verse-toolbar]') || target.closest('[data-verse-number]')) return;
-      setSelectedVerseKey(null);
-      setSelectedVerseKeys(new Set());
+      verseToolbarPointerDownOutsideRef.current = !(
+        target.closest('[data-verse-toolbar]') || target.closest('[data-verse-number]')
+      );
+    };
+    const handlePointerUp = () => {
+      if (
+        verseToolbarPointerDownOutsideRef.current &&
+        !verseToolbarScrollJustHappenedRef.current
+      ) {
+        setSelectedVerseKey(null);
+        setSelectedVerseKeys(new Set());
+      }
+      verseToolbarPointerDownOutsideRef.current = false;
+    };
+    const markScrollJustHappened = () => {
+      verseToolbarScrollJustHappenedRef.current = true;
+      if (verseToolbarScrollClearTimeoutRef.current) clearTimeout(verseToolbarScrollClearTimeoutRef.current);
+      verseToolbarScrollClearTimeoutRef.current = setTimeout(() => {
+        verseToolbarScrollJustHappenedRef.current = false;
+        verseToolbarScrollClearTimeoutRef.current = null;
+      }, 300);
     };
     document.addEventListener('pointerdown', handlePointerDown, true);
-    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('pointercancel', handlePointerUp, true);
+    window.addEventListener('scroll', markScrollJustHappened, true);
+    window.addEventListener('touchmove', markScrollJustHappened, true);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointercancel', handlePointerUp, true);
+      window.removeEventListener('scroll', markScrollJustHappened, true);
+      window.removeEventListener('touchmove', markScrollJustHappened, true);
+      if (verseToolbarScrollClearTimeoutRef.current) clearTimeout(verseToolbarScrollClearTimeoutRef.current);
+    };
   }, [selectedVerseKey]);
 
   const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
@@ -1307,7 +1339,7 @@ const App = () => {
 
   const verseToolbarEl = selectedVerseKey && verseData && (
     <div className="mb-4 w-full flex justify-center" data-verse-toolbar>
-      <div className="mx-auto max-w-[min(100%,42rem)] px-3 py-2 rounded-full bg-white border border-slate-200 shadow-lg z-[100] flex flex-nowrap items-center justify-center gap-0 overflow-visible animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="w-full md:mx-auto md:max-w-[min(100%,42rem)] px-3 py-2 rounded-2xl md:rounded-full bg-white border border-slate-200 shadow-lg z-[100] flex flex-wrap md:flex-nowrap items-center justify-center gap-1 md:gap-0 overflow-visible animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="flex items-center gap-0.5 shrink-0">
           <button type="button" onClick={() => updateSelectedVersesStyle({ bold: !selectedVerseStyle?.bold })} className={`w-7 h-7 flex items-center justify-center rounded font-bold text-xs ${selectedVerseStyle?.bold ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Bold">B</button>
           <button type="button" onClick={() => updateSelectedVersesStyle({ italic: !selectedVerseStyle?.italic })} className={`w-7 h-7 flex items-center justify-center rounded italic font-serif text-xs ${selectedVerseStyle?.italic ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Italic">I</button>
@@ -1982,9 +2014,9 @@ const App = () => {
                 <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
               </header>
 
-              {/* On mobile: show verse toolbar sticky below the main toolbar so it doesn't cover it */}
-              {isMobile && selectedVerseKey && verseData && (
-                <div className="sticky top-16 z-40 py-3 -mx-8 md:-mx-16 px-4 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm mb-6 rounded-b-2xl">
+              {/* Verse toolbar: sticky on all screens so it stays visible on scroll; only closes when clicking away. On mobile stick below main toolbar (top-16). */}
+              {selectedVerseKey && verseData && (
+                <div className="sticky top-16 md:top-0 z-40 mb-6 -mx-8 md:-mx-16 px-4 py-2 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm rounded-b-2xl">
                   {verseToolbarEl}
                 </div>
               )}
@@ -2003,7 +2035,6 @@ const App = () => {
                           const verseStyle = getVerseStyleForWord(verseKey);
                           return (
                             <React.Fragment key={w.id}>
-                              {!isMobile && selectedVerseToolbarSlot?.view === 'firstLetters' && i === selectedVerseToolbarSlot.index && verseToolbarEl}
                               {isFirstInSection && showChapterHeadings && section && (
                                 <span className="block mt-6 mb-2">
                                   <span className={`text-base ${theme.text} font-bold opacity-80 mr-2`}>{section.title}</span>
@@ -2071,9 +2102,6 @@ const App = () => {
                           const verseStyle = getVerseStyleForWord(verseKey);
                           return (
                             <React.Fragment key={word.id}>
-                              {!isMobile && selectedVerseToolbarSlot?.view === 'sections' && sIdx === selectedVerseToolbarSlot.sIdx && word.id === selectedVerseToolbarSlot.wordId && (
-                                <div style={{ flexBasis: '100%', width: '100%' }}>{verseToolbarEl}</div>
-                              )}
                               {showPassageHeadings && word.passageHeading && (wIdx === 0 || section.words[wIdx - 1]?.passageHeading !== word.passageHeading) && (
                                 <span className={`w-full text-sm italic ${paper.text} ${styles.passage} opacity-75 mb-2`} style={{ flexBasis: '100%' }}>
                                   {word.passageHeading}
