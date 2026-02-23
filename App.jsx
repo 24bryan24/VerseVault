@@ -807,6 +807,19 @@ const App = () => {
     return () => { if (highlighterCloseTimeoutRef.current) clearTimeout(highlighterCloseTimeoutRef.current); };
   }, []);
 
+  // Click away from verse / toolbar to deselect
+  useEffect(() => {
+    if (!selectedVerseKey) return;
+    const handlePointerDown = (e) => {
+      const target = e.target;
+      if (target.closest('[data-verse-toolbar]') || target.closest('[data-verse-number]')) return;
+      setSelectedVerseKey(null);
+      setSelectedVerseKeys(new Set());
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [selectedVerseKey]);
+
   const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
     try {
       const res = await fetch(url, options);
@@ -1293,7 +1306,7 @@ const App = () => {
   };
 
   const verseToolbarEl = selectedVerseKey && verseData && (
-    <div className="mb-4 w-full flex justify-center">
+    <div className="mb-4 w-full flex justify-center" data-verse-toolbar>
       <div className="mx-auto max-w-[min(100%,42rem)] px-3 py-2 rounded-full bg-white border border-slate-200 shadow-lg z-[100] flex flex-nowrap items-center justify-center gap-0 overflow-visible animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="flex items-center gap-0.5 shrink-0">
           <button type="button" onClick={() => updateSelectedVersesStyle({ bold: !selectedVerseStyle?.bold })} className={`w-7 h-7 flex items-center justify-center rounded font-bold text-xs ${selectedVerseStyle?.bold ? 'bg-slate-700 text-white' : 'text-slate-700 hover:bg-slate-100'}`} title="Bold">B</button>
@@ -1969,6 +1982,13 @@ const App = () => {
                 <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
               </header>
 
+              {/* On mobile: show verse toolbar sticky below the main toolbar so it doesn't cover it */}
+              {isMobile && selectedVerseKey && verseData && (
+                <div className="sticky top-16 z-40 py-3 -mx-8 md:-mx-16 px-4 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm mb-6 rounded-b-2xl">
+                  {verseToolbarEl}
+                </div>
+              )}
+
               <div className="space-y-20">
                 {showFirstLetters ? (
                   <div className="animate-in fade-in duration-500">
@@ -1983,7 +2003,7 @@ const App = () => {
                           const verseStyle = getVerseStyleForWord(verseKey);
                           return (
                             <React.Fragment key={w.id}>
-                              {selectedVerseToolbarSlot?.view === 'firstLetters' && i === selectedVerseToolbarSlot.index && verseToolbarEl}
+                              {!isMobile && selectedVerseToolbarSlot?.view === 'firstLetters' && i === selectedVerseToolbarSlot.index && verseToolbarEl}
                               {isFirstInSection && showChapterHeadings && section && (
                                 <span className="block mt-6 mb-2">
                                   <span className={`text-base ${theme.text} font-bold opacity-80 mr-2`}>{section.title}</span>
@@ -1998,6 +2018,7 @@ const App = () => {
                                 <span
                                   role="button"
                                   tabIndex={0}
+                                  data-verse-number
                                   onClick={(e) => { e.stopPropagation(); handleVerseNumberClick(verseKey); }}
                                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleVerseNumberClick(verseKey); } }}
                                   className={`text-[10px] align-super mr-0.5 cursor-pointer touch-manipulation inline-flex items-center justify-center rounded-full w-6 h-6 shrink-0
@@ -2050,7 +2071,7 @@ const App = () => {
                           const verseStyle = getVerseStyleForWord(verseKey);
                           return (
                             <React.Fragment key={word.id}>
-                              {selectedVerseToolbarSlot?.view === 'sections' && sIdx === selectedVerseToolbarSlot.sIdx && word.id === selectedVerseToolbarSlot.wordId && (
+                              {!isMobile && selectedVerseToolbarSlot?.view === 'sections' && sIdx === selectedVerseToolbarSlot.sIdx && word.id === selectedVerseToolbarSlot.wordId && (
                                 <div style={{ flexBasis: '100%', width: '100%' }}>{verseToolbarEl}</div>
                               )}
                               {showPassageHeadings && word.passageHeading && (wIdx === 0 || section.words[wIdx - 1]?.passageHeading !== word.passageHeading) && (
@@ -2062,6 +2083,7 @@ const App = () => {
                                 <span
                                   role="button"
                                   tabIndex={0}
+                                  data-verse-number
                                   onClick={(e) => { e.stopPropagation(); handleVerseNumberClick(verseKey); }}
                                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleVerseNumberClick(verseKey); } }}
                                   className={`text-[10px] align-super mr-0.5 cursor-pointer touch-manipulation inline-flex items-center justify-center rounded-full w-6 h-6 shrink-0
