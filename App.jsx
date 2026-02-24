@@ -201,11 +201,13 @@ const LibraryItem = memo(({ passage, onSelect, onRemove, isFavorite, theme, API_
 });
 
 // Optimized Word Component to prevent unnecessary re-renders during layout shifts
-const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, showUnderlines, onClick }) => {
-  const baseVisibility = visibilityMode === 'full' ? 99 : parseInt(visibilityMode);
+const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, showUnderlines, underlineStyle = 'continuous', onClick, zeroLRevealed = {} }) => {
+  const baseVisibility = visibilityMode === 'full' ? 99 : (visibilityMode === '0' ? 0 : parseInt(visibilityMode));
   const extraReveal = revealedLetters[word.id] || 0;
   const totalVisible = baseVisibility + extraReveal;
   const charVisibleMode = visibilityMode === 'wpm' && word.id <= currentWpmIndex;
+  const isZeroL = visibilityMode === '0';
+  const zeroLFirstLetter = zeroLRevealed[word.id] ?? '_';
 
   let alphanumericCounter = 0;
 
@@ -218,9 +220,20 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
       {word.letters.map((char, cIdx) => {
         const isPunctuation = /[^a-zA-Z0-9]/.test(char);
         let isCurrentlyVisible = false;
+        let displayChar = char;
         
         if (visibilityMode === 'wpm') {
           isCurrentlyVisible = charVisibleMode;
+        } else if (isZeroL) {
+          if (isPunctuation) {
+            isCurrentlyVisible = true;
+          } else {
+            if (alphanumericCounter === 0) {
+              displayChar = zeroLFirstLetter;
+              isCurrentlyVisible = true;
+            }
+            alphanumericCounter++;
+          }
         } else {
           if (isPunctuation) {
             isCurrentlyVisible = true;
@@ -230,12 +243,19 @@ const Word = memo(({ word, visibilityMode, revealedLetters, currentWpmIndex, sho
           }
         }
 
+        const isHiddenLetter = showUnderlines && !isCurrentlyVisible && !isPunctuation;
+        const underlineClass = isHiddenLetter
+          ? (underlineStyle === 'spaced'
+            ? 'border-b-2 border-slate-200 !opacity-100 text-transparent min-w-[0.4em] mr-0.5'
+            : 'border-b-2 border-slate-200 !opacity-100 text-transparent')
+          : '';
+
         return (
           <span 
             key={cIdx} 
-            className={`transition-all duration-200 inline-block ${isCurrentlyVisible ? 'opacity-100' : 'opacity-0'} ${showUnderlines && !isCurrentlyVisible && !isPunctuation ? 'border-b-2 border-slate-200 !opacity-100 text-transparent' : ''}`}
+            className={`transition-all duration-200 inline-block ${isCurrentlyVisible ? 'opacity-100' : 'opacity-0'} ${underlineClass}`}
           >
-            {char}
+            {displayChar}
           </span>
         );
       })}
@@ -261,6 +281,7 @@ const App = () => {
   const [verseData, setVerseData] = useState(null);
   const [visibilityMode, setVisibilityMode] = useState('full'); 
   const [showUnderlines, setShowUnderlines] = useState(true);
+  const [underlineStyle, setUnderlineStyle] = useState('continuous'); // 'continuous' | 'spaced' (spaced = one dash per missing letter)
   const [revealedLetters, setRevealedLetters] = useState({});
   const [fontOption, setFontOption] = useState('modern'); // classic, modern, mono, elegant, bold
   const [bgOption, setBgOption] = useState('blank'); // blank, papyrus, notepad, ivory, charcoal
@@ -269,6 +290,10 @@ const App = () => {
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [showFirstLetters, setShowFirstLetters] = useState(false);
   const [bunchedReveal, setBunchedReveal] = useState({}); // wordId -> extra letters revealed (Bunched + 1L/2L/3L)
+  const [zeroLRevealed, setZeroLRevealed] = useState({}); // wordId -> first letter (0L mode: user typed correct first letter)
+  const [zeroLPendingWordId, setZeroLPendingWordId] = useState(null); // word awaiting keypress in 0L mode
+  const zeroLInputRef = useRef(null);
+  const zeroLMobileFocusedAtTopRef = useRef(false);
   const [showVerseNumbers, setShowVerseNumbers] = useState(false);
   const [showPassageHeadings, setShowPassageHeadings] = useState(false);
   const [showChapterHeadings, setShowChapterHeadings] = useState(false);
@@ -867,7 +892,35 @@ const App = () => {
     setScrollAnchorWordId(null);
     setSelectedVerseKey(null);
     setSelectedVerseKeys(new Set());
+    setZeroLRevealed({});
+    setZeroLPendingWordId(null);
   }, [verseData?.reference]);
+
+  // Clear 0L pending word when leaving 0L mode
+  useEffect(() => {
+    if (visibilityMode !== '0') setZeroLPendingWordId(null);
+  }, [visibilityMode]);
+
+  // Focus 0L input when a word is selected (blinking cursor visible on desktop and mobile)
+  useEffect(() => {
+    if (visibilityMode !== '0' || zeroLPendingWordId == null) return;
+    const t = setTimeout(() => zeroLInputRef.current?.focus(), 0);
+    return () => clearTimeout(t);
+  }, [visibilityMode, zeroLPendingWordId]);
+
+  // On mobile: when passage header reaches top and in 0L mode, focus 0L input once so keyboard opens
+  useEffect(() => {
+    if (!isMobile || visibilityMode !== '0' || readingScrollProgress < 1) return;
+    if (zeroLMobileFocusedAtTopRef.current) return;
+    zeroLMobileFocusedAtTopRef.current = true;
+    const t = setTimeout(() => zeroLInputRef.current?.focus(), 100);
+    return () => clearTimeout(t);
+  }, [isMobile, visibilityMode, readingScrollProgress]);
+
+  // Reset mobile "focused at top" when passage changes or leaving 0L so we can focus again next time
+  useEffect(() => {
+    if (visibilityMode !== '0') zeroLMobileFocusedAtTopRef.current = false;
+  }, [visibilityMode, verseData?.reference]);
 
   // Close verse toolbar popovers when selected verse changes
   useEffect(() => {
@@ -1233,6 +1286,11 @@ const App = () => {
 
   const handleWordClick = (wordId) => {
     if (visibilityMode === 'full') return;
+    if (visibilityMode === '0') {
+      setZeroLPendingWordId(wordId);
+      setTimeout(() => zeroLInputRef.current?.focus(), 0);
+      return;
+    }
     if (visibilityMode === 'wpm') {
       const idx = verseData?.allWords?.findIndex(w => w.id === wordId) ?? -1;
       if (idx >= 0) setCurrentWpmIndex(idx);
@@ -1344,6 +1402,19 @@ const App = () => {
   // Bunched letters logic - Preserving casing, punctuation, quotes, dashes, hyphens
   const firstLetterTape = useMemo(() => {
     if (!verseData?.allWords) return '';
+    // 0L = no letters visible, punctuation only; user types first letter per word
+    if (visibilityMode === '0') {
+      const joinChar = ' ';
+      return verseData.allWords
+        .map(w => {
+          let constructed = (zeroLRevealed[w.id] ?? '_');
+          for (const char of w.text) {
+            if (!/[a-zA-Z0-9]/.test(char)) constructed += char;
+          }
+          return constructed;
+        })
+        .join(joinChar);
+    }
     // Corresponds to visibility mode: 1L = 1 letter, 2L = 2 letters, etc.
     const limit = (visibilityMode === 'full' || visibilityMode === 'wpm') ? 999 : parseInt(visibilityMode);
     // Add 1 small space between words for 'full', '2', '3'
@@ -1369,13 +1440,20 @@ const App = () => {
         return constructed;
       })
       .join(joinChar);
-  }, [verseData, visibilityMode]);
+  }, [verseData, visibilityMode, zeroLRevealed]);
 
   // Build display string for a list of words with base limit + bunchedReveal (for click-to-reveal sentences)
-  const getBunchedSentenceDisplay = (words, baseLimit, revealMap) => {
+  const getBunchedSentenceDisplay = (words, baseLimit, revealMap, zeroLRevealedMap = {}) => {
     const joinChar = ' ';
     return words
       .map(w => {
+        if (baseLimit === 0) {
+          let constructed = (zeroLRevealedMap[w.id] ?? '_');
+          for (const char of w.text) {
+            if (!/[a-zA-Z0-9]/.test(char)) constructed += char;
+          }
+          return constructed;
+        }
         let alphaFound = 0;
         const limit = baseLimit + (revealMap[w.id] || 0);
         let constructed = "";
@@ -1396,6 +1474,11 @@ const App = () => {
   };
 
   const handleBunchedWordClick = (wordId) => {
+    if (visibilityMode === '0') {
+      setZeroLPendingWordId(wordId);
+      setTimeout(() => zeroLInputRef.current?.focus(), 0);
+      return;
+    }
     const word = verseData?.allWords?.find(w => w.id === wordId);
     const baseLimit = (visibilityMode === 'full' || visibilityMode === 'wpm') ? 999 : parseInt(visibilityMode);
     if (!word) return;
@@ -1855,16 +1938,16 @@ const App = () => {
               </button>
               <button
                 onClick={() => {
-                  const next = (visibilityMode === '3' ? '2' : visibilityMode === '2' ? '1' : '3');
+                  const next = (visibilityMode === '3' ? '2' : visibilityMode === '2' ? '1' : visibilityMode === '1' ? '0' : '3');
                   setVisibilityMode(next);
                   resetWpm();
                 }}
                 className={`p-2 rounded-lg text-[10px] font-black transition-all shrink-0 min-w-[36px] flex items-center justify-center ${
-                  ['1', '2', '3'].includes(visibilityMode) ? `${theme.bg} text-white shadow-lg ${theme.shadow}` : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'
+                  ['1', '2', '3', '0'].includes(visibilityMode) ? `${theme.bg} text-white shadow-lg ${theme.shadow}` : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'
                 }`}
-                title="Cycle 3L → 2L → 1L"
+                title="Cycle 3L → 2L → 1L → 0L"
               >
-                {['1', '2', '3'].includes(visibilityMode) ? `${visibilityMode}L` : '3L'}
+                {['1', '2', '3', '0'].includes(visibilityMode) ? `${visibilityMode}L` : '3L'}
               </button>
               <button
                 onClick={() => { setVisibilityMode('wpm'); }}
@@ -1939,7 +2022,7 @@ const App = () => {
               >
                 <Eye size={16} />
               </button>
-              {['3', '2', '1'].map((id) => (
+              {['3', '2', '1', '0'].map((id) => (
                 <button
                   key={id}
                   onClick={() => { setVisibilityMode(id); resetWpm(); }}
@@ -2105,6 +2188,22 @@ const App = () => {
             >
               <ListOrdered size={18} />
             </button>
+            <button
+              onClick={() => { 
+                setUnderlineStyle(s => s === 'continuous' ? 'spaced' : 'continuous');
+                if (isMobile) {
+                  setSidebarVisible(true);
+                  if (sidebarScrollEndTimerRef.current) clearTimeout(sidebarScrollEndTimerRef.current);
+                  sidebarScrollEndTimerRef.current = setTimeout(() => setSidebarVisible(false), 750);
+                }
+              }}
+              className={`mt-auto p-2.5 rounded-xl flex items-center justify-center transition-all border-2 shrink-0 ${
+                underlineStyle === 'spaced' ? `${theme.bg} text-white border-transparent ${theme.shadow}` : 'bg-white border-slate-200 text-slate-400'
+              }`}
+              title={underlineStyle === 'continuous' ? 'Missing letters: continuous underline. Click for spaced (one dash per letter).' : 'Missing letters: spaced dashes. Click for continuous underline.'}
+            >
+              <Underline size={18} />
+            </button>
           </div>
         )}
 
@@ -2150,10 +2249,46 @@ const App = () => {
                 <div className={`w-12 h-1 ${theme.bg} mx-auto mt-2 rounded-full transform transition-transform group-hover:scale-x-125`}></div>
               </header>
 
-              {/* Verse toolbar: sticky on all screens so it stays visible on scroll; only closes when clicking away. On mobile stick below main toolbar (top-16). */}
-              {selectedVerseKey && verseData && (
-                <div className="sticky top-16 md:top-0 z-40 mb-6 -mx-8 md:-mx-16 px-4 py-2 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm rounded-b-2xl">
-                  {verseToolbarEl}
+              {/* 0L mode: visible typing bar with blinking cursor; on mobile focus when header at top to show keyboard */}
+              {visibilityMode === '0' && verseData && (
+                <div className="flex items-center justify-center gap-2 py-3 px-4 mb-4 rounded-xl bg-black/5 border border-black/10 min-h-[52px]">
+                  <span className={`text-sm ${paper.text} opacity-80 whitespace-nowrap`}>
+                    {zeroLPendingWordId != null ? 'Type the first letter:' : 'Tap a word, then type its first letter'}
+                  </span>
+                  <input
+                    ref={zeroLInputRef}
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    aria-label="First letter of word"
+                    tabIndex={0}
+                    className={`min-w-[2ch] w-8 h-9 px-1.5 rounded border-2 text-lg font-mono text-center ${paper.text} bg-transparent caret-current border-current/30 focus:outline-none focus:border-current/60 selection:bg-transparent`}
+                    style={{ caretColor: 'currentColor' }}
+                    value=""
+                    readOnly
+                    onKeyDown={(e) => {
+                      if (zeroLPendingWordId == null) return;
+                      e.preventDefault();
+                      const key = e.key;
+                      if (key.length === 1 && /[a-zA-Z0-9]/.test(key)) {
+                        const words = verseData?.allWords ?? [];
+                        const word = words.find(w => w.id === zeroLPendingWordId);
+                        const firstChar = word?.text?.match(/[a-zA-Z0-9]/)?.[0];
+                        if (firstChar && firstChar.toLowerCase() === key.toLowerCase()) {
+                          setZeroLRevealed(prev => ({ ...prev, [zeroLPendingWordId]: firstChar }));
+                          const currentIdx = words.findIndex(w => w.id === zeroLPendingWordId);
+                          const nextWord = words.slice(currentIdx + 1).find(w => /[a-zA-Z0-9]/.test(w.text) && !zeroLRevealed[w.id]);
+                          const nextId = nextWord?.id ?? null;
+                          setZeroLPendingWordId(nextId);
+                          if (!nextId) zeroLInputRef.current?.blur();
+                        }
+                      } else if (key === 'Escape') {
+                        setZeroLPendingWordId(null);
+                        zeroLInputRef.current?.blur();
+                      }
+                    }}
+                  />
                 </div>
               )}
 
@@ -2171,6 +2306,11 @@ const App = () => {
                           const verseStyle = getVerseStyleForWord(verseKey);
                           return (
                             <React.Fragment key={w.id}>
+                              {selectedVerseToolbarSlot?.view === 'firstLetters' && i === selectedVerseToolbarSlot.index && (
+                                <div className="sticky top-16 md:top-0 z-40 mb-4 -mx-0 py-2 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm rounded-b-xl">
+                                  {verseToolbarEl}
+                                </div>
+                              )}
                               {isFirstInSection && showChapterHeadings && section && (
                                 <span className="block mt-6 mb-2">
                                   <span className={`text-base ${theme.text} font-bold opacity-80 mr-2`}>{section.title}</span>
@@ -2208,12 +2348,51 @@ const App = () => {
                                 className={`cursor-pointer select-none inline hover:opacity-100 opacity-90 active:opacity-100 transition-opacity rounded px-0.5 -mx-0.5 touch-manipulation ${verseStyle.className}`}
                                 style={{ ...verseStyle.style, WebkitTapHighlightColor: 'transparent' }}
                               >
-                                {getBunchedSentenceDisplay([w], visibilityMode === 'full' || visibilityMode === 'wpm' ? 999 : parseInt(visibilityMode), bunchedReveal)}
+                                {getBunchedSentenceDisplay([w], visibilityMode === 'full' || visibilityMode === 'wpm' ? 999 : parseInt(visibilityMode), bunchedReveal, zeroLRevealed)}
                               </span>
                               {' '}
                             </React.Fragment>
                           );
                         })}
+                      </div>
+                    ) : visibilityMode === '0' && verseData?.allWords?.length ? (
+                      <div className={`break-words tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 ${styles.passage} inline`}>
+                        {(() => {
+                          const words = verseData.allWords;
+                          const caretWordIdx = zeroLPendingWordId != null
+                            ? words.findIndex(w => w.id === zeroLPendingWordId)
+                            : words.findIndex(w => /[a-zA-Z0-9]/.test(w.text) && !zeroLRevealed[w.id]);
+                          const caretAt = caretWordIdx === -1 ? words.length : caretWordIdx;
+                          return (
+                            <>
+                              {words.map((w, i) => (
+                                <React.Fragment key={w.id}>
+                                  {i === caretAt && (
+                                    <span
+                                      className="caret-blink inline-block w-0.5 h-[1em] align-baseline bg-current shrink-0"
+                                      style={{ marginRight: '0.125em' }}
+                                      aria-hidden
+                                    />
+                                  )}
+                                  {i > 0 && ' '}
+                                  <span
+                                    data-word-id={w.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => handleBunchedWordClick(w.id)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBunchedWordClick(w.id); } }}
+                                    className="cursor-pointer select-none inline hover:opacity-100 opacity-90 rounded px-0.5 -mx-0.5 touch-manipulation"
+                                  >
+                                    {getBunchedSentenceDisplay([w], 0, {}, zeroLRevealed)}
+                                  </span>
+                                </React.Fragment>
+                              ))}
+                              {caretAt === words.length && (
+                                <span className="caret-blink inline-block w-0.5 h-[1em] align-baseline bg-current shrink-0 ml-0.5" aria-hidden />
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <div className={`break-all tracking-[0.1em] ${paper.text} leading-relaxed opacity-80 select-all ${styles.passage}`}>
@@ -2239,6 +2418,13 @@ const App = () => {
                           const verseStyle = getVerseStyleForWord(verseKey);
                           return (
                             <React.Fragment key={word.id}>
+                              {selectedVerseToolbarSlot?.view === 'sections' && sIdx === selectedVerseToolbarSlot.sIdx && word.id === selectedVerseToolbarSlot.wordId && (
+                                <div style={{ flexBasis: '100%', width: '100%' }} className="relative h-0 overflow-visible">
+                                  <div className="absolute bottom-full left-0 right-0 z-40 py-2 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm rounded-b-xl">
+                                    {verseToolbarEl}
+                                  </div>
+                                </div>
+                              )}
                               {showPassageHeadings && word.passageHeading && (wIdx === 0 || section.words[wIdx - 1]?.passageHeading !== word.passageHeading) && (
                                 <span className={`w-full text-sm italic ${paper.text} ${styles.passage} opacity-75 mb-2`} style={{ flexBasis: '100%' }}>
                                   {word.passageHeading}
@@ -2267,7 +2453,9 @@ const App = () => {
                                   revealedLetters={revealedLetters}
                                   currentWpmIndex={currentWpmIndex}
                                   showUnderlines={true}
+                                  underlineStyle={underlineStyle}
                                   onClick={handleWordClick}
+                                  zeroLRevealed={zeroLRevealed}
                                 />
                               </span>
                             </React.Fragment>
