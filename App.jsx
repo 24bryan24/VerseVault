@@ -1780,7 +1780,7 @@ const App = () => {
         {/* Control Panel */}
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 mb-8 font-sans relative z-10">
           <div className="flex flex-col md:flex-row gap-6 items-end">
-            <div className="flex-1 w-full flex gap-2">
+            <div className={`flex-1 w-full flex min-w-0 gap-2 ${searchMode === 'select' ? 'flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-2' : 'flex-row items-end'}`}>
                 {searchMode === 'text' ? (
                   <div className="relative w-full flex items-stretch flex-1 min-w-0">
                     <div className="relative flex-1 min-w-0">
@@ -1815,7 +1815,7 @@ const App = () => {
                     ) : null}
                   </div>
                 ) : (
-                  <div className="flex gap-2 w-full flex-1 min-w-0">
+                  <div className="flex gap-2 w-full min-w-0 flex-1 items-stretch sm:min-h-[3rem]">
                     <button
                       type="button"
                       onClick={() => setSearchMode('text')}
@@ -1824,10 +1824,14 @@ const App = () => {
                     >
                       <Keyboard size={18} />
                     </button>
-                    <select value={selBook} onChange={(e) => setSelBook(e.target.value)} className={`flex-[2] bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none ${theme.focus}`}>
+                    <select
+                      value={selBook}
+                      onChange={(e) => setSelBook(e.target.value)}
+                      className={`min-w-0 max-w-[5.75rem] shrink-0 bg-slate-50 border-2 border-slate-100 rounded-xl px-2 py-3 text-sm font-medium outline-none sm:max-w-[10rem] sm:px-3 sm:text-base md:max-w-none md:flex-[2] md:text-base ${theme.focus}`}
+                    >
                       {BIBLE_DATA.map(b => <option key={b.book} value={b.book}>{b.book}</option>)}
                     </select>
-                    <div className={`flex-1 flex items-center bg-slate-50 border-2 border-slate-100 rounded-xl overflow-hidden ${theme.focus}`}>
+                    <div className={`min-w-0 flex-1 flex items-center bg-slate-50 border-2 border-slate-100 rounded-xl overflow-hidden ${theme.focus}`}>
                       <button
                         type="button"
                         onClick={(e) => { e.preventDefault(); e.stopPropagation();
@@ -1841,17 +1845,22 @@ const App = () => {
                       >
                         <ChevronRight size={16} />
                       </button>
-                      <select value={selChapter} onChange={(e) => setSelChapter(e.target.value)} className="flex-1 min-w-0 bg-transparent px-3 py-3 font-medium outline-none border-0">
+                      <select value={selChapter} onChange={(e) => setSelChapter(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium outline-none border-0 sm:px-3 sm:text-base">
                         {chaptersList.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
-                    <select value={selVerse} onChange={(e) => setSelVerse(e.target.value)} className={`flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-3 font-medium outline-none ${theme.focus}`}>
+                    <select value={selVerse} onChange={(e) => setSelVerse(e.target.value)} className={`min-w-0 flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-2 py-3 text-sm font-medium outline-none sm:px-3 sm:text-base ${theme.focus}`}>
                       {versesList.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
                   </div>
                 )}
                 
-                <button onClick={() => fetchPassage()} disabled={loading} className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50">
+                <button
+                  type="button"
+                  onClick={() => fetchPassage()}
+                  disabled={loading}
+                  className="shrink-0 self-end sm:self-auto bg-slate-900 hover:bg-black text-white px-5 py-3 rounded-xl transition-all disabled:opacity-50"
+                >
                   {loading ? <RefreshCw className="animate-spin" size={20} /> : <ArrowRight size={24} />}
                 </button>
             </div>
