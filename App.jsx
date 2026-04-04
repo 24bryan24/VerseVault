@@ -292,6 +292,7 @@ const App = () => {
   const [bunchedReveal, setBunchedReveal] = useState({}); // wordId -> extra letters revealed (Bunched + 1L/2L/3L)
   const [zeroLRevealed, setZeroLRevealed] = useState({}); // wordId -> first letter (0L mode: user typed correct first letter)
   const [zeroLPendingWordId, setZeroLPendingWordId] = useState(null); // word awaiting keypress in 0L mode
+  const [zeroLInputValue, setZeroLInputValue] = useState(''); // controlled empty buffer — must not be readOnly or iOS won't show keyboard
   const zeroLInputRef = useRef(null);
   const zeroLMobileFocusedAtTopRef = useRef(false);
   const [showVerseNumbers, setShowVerseNumbers] = useState(false);
@@ -894,11 +895,15 @@ const App = () => {
     setSelectedVerseKeys(new Set());
     setZeroLRevealed({});
     setZeroLPendingWordId(null);
+    setZeroLInputValue('');
   }, [verseData?.reference]);
 
   // Clear 0L pending word when leaving 0L mode
   useEffect(() => {
-    if (visibilityMode !== '0') setZeroLPendingWordId(null);
+    if (visibilityMode !== '0') {
+      setZeroLPendingWordId(null);
+      setZeroLInputValue('');
+    }
   }, [visibilityMode]);
 
   // Focus 0L input when a word is selected (blinking cursor visible on desktop and mobile)
@@ -1488,6 +1493,28 @@ const App = () => {
     if (baseLimit + currentReveal < totalAlpha) {
       setBunchedReveal(prev => ({ ...prev, [wordId]: (prev[wordId] || 0) + 1 }));
     }
+  };
+
+  /** 0L: apply one guessed letter (shared by keydown + onChange so mobile virtual keyboard works). */
+  const handleZeroLLetter = (key) => {
+    if (zeroLPendingWordId == null) return;
+    if (!key || key.length !== 1 || !/[a-zA-Z0-9]/.test(key)) return;
+    const words = verseData?.allWords ?? [];
+    const pendingId = zeroLPendingWordId;
+    const word = words.find(w => w.id === pendingId);
+    const firstChar = word?.text?.match(/[a-zA-Z0-9]/)?.[0];
+    if (!firstChar || firstChar.toLowerCase() !== key.toLowerCase()) return;
+    setZeroLRevealed((prev) => {
+      const merged = { ...prev, [pendingId]: firstChar };
+      const currentIdx = words.findIndex(w => w.id === pendingId);
+      const nextWord = words.slice(currentIdx + 1).find(w => /[a-zA-Z0-9]/.test(w.text) && !merged[w.id]);
+      const nextId = nextWord?.id ?? null;
+      queueMicrotask(() => {
+        setZeroLPendingWordId(nextId);
+        if (nextId == null) zeroLInputRef.current?.blur();
+      });
+      return merged;
+    });
   };
 
   const formatReadingTimer = (seconds) => {
@@ -2260,41 +2287,51 @@ const App = () => {
 
               {/* 0L mode: visible typing bar with blinking cursor; on mobile focus when header at top to show keyboard */}
               {visibilityMode === '0' && verseData && (
-                <div className="flex items-center justify-center gap-2 py-3 px-4 mb-4 rounded-xl bg-black/5 border border-black/10 min-h-[52px]">
+                <div
+                  className="flex items-center justify-center gap-2 py-3 px-4 mb-4 rounded-xl bg-black/5 border border-black/10 min-h-[52px]"
+                  onPointerDown={(e) => {
+                    if (e.target.closest('input')) return;
+                    zeroLInputRef.current?.focus();
+                  }}
+                >
                   <span className={`text-sm ${paper.text} opacity-80 whitespace-nowrap`}>
-                    {zeroLPendingWordId != null ? 'Type the first letter:' : 'Tap a word, then type its first letter'}
+                    {zeroLPendingWordId != null ? 'Type the first letter:' : 'Tap a word, then tap here or a word to type'}
                   </span>
                   <input
                     ref={zeroLInputRef}
                     type="text"
                     inputMode="text"
+                    enterKeyHint="done"
                     autoComplete="off"
+                    autoCorrect="off"
                     autoCapitalize="off"
+                    spellCheck={false}
                     aria-label="First letter of word"
                     tabIndex={0}
-                    className={`min-w-[2ch] w-8 h-9 px-1.5 rounded border-2 text-lg font-mono text-center ${paper.text} bg-transparent caret-current border-current/30 focus:outline-none focus:border-current/60 selection:bg-transparent`}
+                    className={`min-h-[44px] min-w-[44px] px-2 rounded border-2 text-lg font-mono text-center ${paper.text} bg-white/80 caret-current border-current/30 focus:outline-none focus:border-current/60 selection:bg-transparent sm:min-h-9 sm:min-w-[2ch] sm:bg-transparent`}
                     style={{ caretColor: 'currentColor' }}
-                    value=""
-                    readOnly
+                    value={zeroLInputValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) {
+                        setZeroLInputValue('');
+                        return;
+                      }
+                      handleZeroLLetter(v.slice(-1));
+                      setZeroLInputValue('');
+                    }}
                     onKeyDown={(e) => {
-                      if (zeroLPendingWordId == null) return;
-                      e.preventDefault();
-                      const key = e.key;
-                      if (key.length === 1 && /[a-zA-Z0-9]/.test(key)) {
-                        const words = verseData?.allWords ?? [];
-                        const word = words.find(w => w.id === zeroLPendingWordId);
-                        const firstChar = word?.text?.match(/[a-zA-Z0-9]/)?.[0];
-                        if (firstChar && firstChar.toLowerCase() === key.toLowerCase()) {
-                          setZeroLRevealed(prev => ({ ...prev, [zeroLPendingWordId]: firstChar }));
-                          const currentIdx = words.findIndex(w => w.id === zeroLPendingWordId);
-                          const nextWord = words.slice(currentIdx + 1).find(w => /[a-zA-Z0-9]/.test(w.text) && !zeroLRevealed[w.id]);
-                          const nextId = nextWord?.id ?? null;
-                          setZeroLPendingWordId(nextId);
-                          if (!nextId) zeroLInputRef.current?.blur();
-                        }
-                      } else if (key === 'Escape') {
+                      if (e.key === 'Escape') {
                         setZeroLPendingWordId(null);
+                        setZeroLInputValue('');
                         zeroLInputRef.current?.blur();
+                        return;
+                      }
+                      if (zeroLPendingWordId == null) return;
+                      if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
+                        e.preventDefault();
+                        handleZeroLLetter(e.key);
+                        setZeroLInputValue('');
                       }
                     }}
                   />
